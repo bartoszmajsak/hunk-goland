@@ -1,0 +1,68 @@
+<idea-plugin>
+    <id>dev.hunk.session</id>
+    <name>Hunk Session</name>
+    <vendor url="https://hunk.dev">Hunk</vendor>
+
+    <description><![CDATA[
+        Adds reviewer comments to a live Hunk session from GoLand's code editor
+        and text diff viewers.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable
+                id="dev.hunk.goland.settings"
+                parentId="tools"
+                instance="dev.hunk.goland.settings.HunkConfigurable"
+                displayName="Hunk Session"/>
+        <notificationGroup
+                id="Hunk Session"
+                displayType="BALLOON"
+                isLogByDefault="true"/>
+        <postStartupActivity implementation="dev.hunk.goland.action.HunkGutterStartupActivity"/>
+        <statusBarWidgetFactory
+                id="HunkReviewComments"
+                implementation="dev.hunk.goland.action.HunkReviewStatusBarWidgetFactory"/>
+        <openapi.vcs.changes.ui.filePathIconProvider
+                implementation="dev.hunk.goland.action.HunkFilePathIconProvider"
+                order="first"/>
+    </extensions>
+
+    <actions>
+        <action id="dev.hunk.goland.AddComment"
+                class="dev.hunk.goland.action.AddHunkNoteAction"
+                text="Add Hunk Comment…"
+                description="Add a reviewer comment to the live Hunk session"
+                icon="/icons/hunkReviewComment.svg">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="Diff.EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="Diff.EditorGutterPopupMenu" anchor="first"/>
+            <add-to-group group-id="Diff.ViewerToolbar" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="dev.hunk.goland.PreviousCommentThread"
+                class="dev.hunk.goland.action.PreviousHunkThreadAction"
+                text="Previous Hunk Comment Thread"
+                description="Jump to the previous right-side Hunk comment thread"
+                icon="/icons/hunkMixedThread.svg">
+            <add-to-group group-id="GoToMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt COMMA"/>
+        </action>
+        <action id="dev.hunk.goland.ShowCommentedFiles"
+                class="dev.hunk.goland.action.ShowHunkCommentedFilesAction"
+                text="Show Hunk Commented Files"
+                description="List files with right-side Hunk comment threads"
+                icon="/icons/hunkMixedThread.svg">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="dev.hunk.goland.NextCommentThread"
+                class="dev.hunk.goland.action.NextHunkThreadAction"
+                text="Next Hunk Comment Thread"
+                description="Jump to the next right-side Hunk comment thread"
+                icon="/icons/hunkMixedThread.svg">
+            <add-to-group group-id="GoToMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt PERIOD"/>
+        </action>
+    </actions>
+</idea-plugin>
