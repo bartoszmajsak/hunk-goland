@@ -108,6 +108,7 @@ class HunkRealDaemonE2eTest {
                 ui.waitForSubmission(TestGoProject.CHANGED_LINE)
                 HunkReviewAssert.assertThat(firstPersisted)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
+                ui.awaitCommentAuthor("Hunk GoLand test")
 
                 ui.submitCommentWithButton(WRAPPED_MARKDOWN_COMMENT)
                 val sequentiallyPersisted = awaitValue(

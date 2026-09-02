@@ -46,9 +46,13 @@ coverage.
 
 - Use ordinary review language such as **Add Hunk Comment…**. Do not reintroduce confusing “human,”
   “Reveal,” or **Show in Hunk** controls.
-- Keep threads line-attached. Preserve chronological oldest-to-newest card order, compact/collapsible
-  cards, safe Markdown, the expandable composer, `Ctrl+Enter`, inline delete confirmation, and
-  stable user-controlled scrolling across refreshes.
+- Keep threads line-attached. Preserve chronological oldest-to-newest card order, natural-height
+  compact/collapsible cards, safe Markdown, independently expandable conversation and composer
+  areas, `Ctrl+Enter`, inline delete confirmation, and stable user-controlled scrolling across
+  refreshes.
+- Treat upstream reviewer `author: "user"` as a presentation placeholder: show the effective
+  repository `git user.name` when accessible, retain explicit reviewer/agent names, and never change
+  the stored author or `source: "user"` provenance to achieve the display label.
 - Preserve distinct reviewer/agent glyphs, native VCS tree file badges, status counts, and
   previous/next thread navigation. Display shortcuts from the active JetBrains keymap rather than
   hard-coding labels.

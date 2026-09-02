@@ -16,8 +16,11 @@ For the integration decisions, failed approaches, upstream constraints, and curr
   lines outside the diff are rejected. A line does not need an existing thread.
 - **Reviewer and agent provenance:** reviewer notes (`source: "user"`) and agent responses
   (`source: "agent"`) have distinct cards and gutter glyphs.
-- **Modern inline UI:** chronological, collapsible Markdown cards, inline deletion confirmation,
-  and a compact/expandable composer beneath the reviewed line—no dialog or popup.
+- **Modern inline UI:** chronological, natural-height, collapsible Markdown cards, independently
+  expandable conversation and composer areas, and inline deletion confirmation beneath the
+  reviewed line—no dialog or popup.
+- **Reviewer identity:** when upstream Hunk reports its default `author: "user"`, the UI presents
+  the effective repository `git user.name`; explicit reviewer and agent author names stay intact.
 - **Keyboard submission:** `Ctrl+Enter` adds a comment; Enter inserts a newline.
 - **Review navigation:** commented files carry a blue Hunk badge in native VCS change trees, and the
   status bar shows the number of commented files and notes. Each thread has clickable
@@ -89,7 +92,7 @@ This project always targets upstream `modem-dev/hunk`; no companion Hunk fork is
 
 2. In GoLand, open **Settings | Plugins**, choose the gear menu, then
    **Install Plugin from Disk…**.
-3. Select `build/distributions/hunk-goland-0.3.7.zip` and restart GoLand when prompted.
+3. Select `build/distributions/hunk-goland-0.3.8.zip` and restart GoLand when prompted.
 4. In **Settings | Tools | Hunk Session**, confirm the loopback daemon address and Hunk executable.
    Defaults are `127.0.0.1:47657` and `hunk`.
 5. On a diff-relevant line, choose **Add Hunk Comment…**. GoLand starts the matching off-screen Hunk

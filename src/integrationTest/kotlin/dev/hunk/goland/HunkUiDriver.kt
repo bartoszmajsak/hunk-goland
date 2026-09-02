@@ -344,6 +344,30 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         }
     }
 
+    fun expandThreadMessages(): Pair<Int, Int> {
+        val messages = frame.x { byAccessibleName("Hunk thread messages") }
+        val compactHeight = messages.component.height
+        frame.button { byAccessibleName("Expand thread messages") }.doClickInIde()
+        val expandedHeight = awaitValue("expanded thread messages") {
+            messages.component.height.takeIf { height -> height > compactHeight }
+        }
+        return compactHeight to expandedHeight
+    }
+
+    fun compactThreadMessages() {
+        frame.button { byAccessibleName("Use compact thread messages") }.doClickInIde()
+        awaitCondition("compact thread messages control") {
+            frame.button { byAccessibleName("Expand thread messages") }.present()
+        }
+    }
+
+    fun awaitCommentAuthor(author: String) {
+        awaitCondition("comment author '$author'") {
+            frame.x { byAccessibleName("Comment author: $author") }
+                .let { it.present() && it.component.isShowing() }
+        }
+    }
+
     fun messageBodyY(accessibleName: String, bodyText: String): Int = awaitValue(
         label = "$accessibleName containing '$bodyText'",
     ) {

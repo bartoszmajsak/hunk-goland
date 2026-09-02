@@ -108,8 +108,18 @@ class HunkReviewCommentUiTest {
                         frame,
                         "02-editor-thread",
                         "Modern line-attached review thread",
-                        "Compact native cards give comments and agent responses distinct titles, provenance colors, author metadata, accessible disclosure controls, and keymap-aware previous/next navigation. Messages are chronological, with the newest response last.",
+                        "Natural-height cards give comments and agent responses distinct titles, provenance colors, author metadata, comfortable spacing, accessible disclosure controls, and keymap-aware previous/next navigation. Messages are chronological, with the newest response last.",
                     )
+
+                    val (compactMessagesHeight, expandedMessagesHeight) = ui.expandThreadMessages()
+                    assertThat(expandedMessagesHeight).isGreaterThan(compactMessagesHeight)
+                    ux.capture(
+                        frame,
+                        "02-expanded-messages",
+                        "Expandable review conversation",
+                        "The message area expands independently when a longer review conversation needs more reading room, while individual cards remain collapsible.",
+                    )
+                    ui.compactThreadMessages()
 
                     val (compactComposerHeight, expandedComposerHeight) = ui.expandCommentEditor()
                     assertThat(expandedComposerHeight).isGreaterThan(compactComposerHeight)

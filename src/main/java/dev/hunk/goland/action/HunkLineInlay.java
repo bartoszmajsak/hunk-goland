@@ -25,6 +25,7 @@ import com.intellij.util.ui.JBUI;
 import dev.hunk.goland.model.HunkSessionNote;
 import dev.hunk.goland.model.ReviewTarget;
 import dev.hunk.goland.service.HunkReviewLauncher;
+import dev.hunk.goland.service.HunkReviewerIdentity;
 import dev.hunk.goland.service.HunkSessionException;
 import dev.hunk.goland.service.HunkSessionService;
 
@@ -38,6 +39,7 @@ import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.Icon;
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.html.HTMLEditorKit;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -80,6 +82,9 @@ final class HunkLineInlay implements Disposable {
     private static final Color COMMENT_ACCENT = new JBColor(0x2468B2, 0x76A9FA);
     private static final Color AGENT_ACCENT = new JBColor(0x7656B7, 0xB69CFF);
     private static final DateTimeFormatter NOTE_TIME = DateTimeFormatter.ofPattern("MMM d, HH:mm");
+    private static final int COMPACT_MESSAGES_HEIGHT = 178;
+    private static final int EXPANDED_MESSAGES_HEIGHT = 320;
+    private static final int UNAVAILABLE_MESSAGES_HEIGHT = 142;
     private static ActiveThread active;
 
     private final Project project;
@@ -109,6 +114,9 @@ final class HunkLineInlay implements Disposable {
     private boolean reviewStarting;
     private boolean revealAfterInitialLoad = true;
     private boolean composerExpanded;
+    private boolean messagesExpanded;
+    private boolean composerAvailable;
+    private String reviewerName = "Reviewer";
 
     private HunkLineInlay(Project project, Editor editor, ReviewTarget target, int editorLine) {
         this.project = project;
@@ -156,6 +164,7 @@ final class HunkLineInlay implements Disposable {
 
         active = new ActiveThread(this, editor, target, editorLine, inlay);
         Disposer.register(inlay, this);
+        resolveReviewerName();
 
         project.getService(HunkReviewGutterService.class).watchLine(
                 target,
@@ -185,7 +194,7 @@ final class HunkLineInlay implements Disposable {
         noteScroll.setOpaque(false);
         noteScroll.getViewport().setOpaque(false);
         noteScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        noteScroll.setPreferredSize(new Dimension(JBUI.scale(220), JBUI.scale(158)));
+        updateMessageAreaHeight();
         noteScroll.getAccessibleContext().setAccessibleName("Hunk thread messages");
 
         body.setRows(3);
@@ -263,6 +272,15 @@ final class HunkLineInlay implements Disposable {
         var trailing = new JPanel(new FlowLayout(FlowLayout.RIGHT, JBUI.scale(8), 0));
         trailing.setOpaque(false);
         trailing.add(noteCount);
+        var resizeMessages = compactIconButton(AllIcons.Actions.Expandall, 22);
+        updateMessagesResizeButton(resizeMessages);
+        resizeMessages.addActionListener(ignored -> {
+            messagesExpanded = !messagesExpanded;
+            updateMessageAreaHeight();
+            updateMessagesResizeButton(resizeMessages);
+            refreshNotesPanel();
+        });
+        trailing.add(resizeMessages);
         trailing.add(close);
 
         var header = new JPanel(new BorderLayout(JBUI.scale(8), 0));
@@ -456,10 +474,12 @@ final class HunkLineInlay implements Disposable {
             empty.setBorder(JBUI.Borders.empty(8, 4));
             notes.add(empty);
         } else {
-            ordered.forEach(note -> {
-                notes.add(noteCard(note));
-                notes.add(Box.createVerticalStrut(JBUI.scale(6)));
-            });
+            for (var index = 0; index < ordered.size(); index++) {
+                notes.add(noteCard(ordered.get(index)));
+                if (index < ordered.size() - 1) {
+                    notes.add(Box.createVerticalStrut(JBUI.scale(9)));
+                }
+            }
         }
         if (targetErrorPanel != null) {
             notes.add(targetErrorPanel);
@@ -497,6 +517,10 @@ final class HunkLineInlay implements Disposable {
         heading.setFont(heading.getFont().deriveFont(Font.BOLD));
         heading.setForeground(accent);
         var metadata = secondaryLabel(noteMetadata(note));
+        metadata.setBorder(JBUI.Borders.emptyTop(2));
+        metadata.getAccessibleContext().setAccessibleName(
+                title + " author: " + displayAuthor(note)
+        );
         var headingStack = verticalStack(heading, metadata);
 
         var text = markdownBody(note, title);
@@ -517,9 +541,14 @@ final class HunkLineInlay implements Disposable {
             header.add(deleteControls(note), BorderLayout.EAST);
         }
 
-        var card = new RoundedPanel(reviewerComment ? COMMENT_TINT : AGENT_TINT, OUTLINE, 12);
-        card.setLayout(new BorderLayout(0, JBUI.scale(2)));
-        card.setBorder(JBUI.Borders.empty(8, 9));
+        var card = new NaturalHeightRoundedPanel(
+                reviewerComment ? COMMENT_TINT : AGENT_TINT,
+                OUTLINE,
+                12
+        );
+        card.setLayout(new BorderLayout(0, JBUI.scale(6)));
+        card.setBorder(JBUI.Borders.empty(10, 12));
+        card.setAlignmentX(JComponent.LEFT_ALIGNMENT);
         card.getAccessibleContext().setAccessibleName(title + " card");
         card.add(header, BorderLayout.NORTH);
         card.add(text, BorderLayout.CENTER);
@@ -547,13 +576,17 @@ final class HunkLineInlay implements Disposable {
     private JComponent markdownBody(HunkSessionNote note, String title) {
         var pane = new JEditorPane();
         pane.setContentType("text/html");
+        var editorKit = (HTMLEditorKit) pane.getEditorKit();
+        editorKit.getStyleSheet().addRule("body { margin: 0; padding: 0; }");
+        editorKit.getStyleSheet().addRule("p { margin-top: 0; margin-bottom: 6px; }");
+        editorKit.getStyleSheet().addRule("ul, ol, pre { margin-top: 4px; margin-bottom: 6px; }");
         pane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         pane.setFont(new JBLabel().getFont());
         pane.setForeground(JBColor.foreground());
         pane.setEditable(false);
         pane.setOpaque(false);
         pane.setFocusable(true);
-        pane.setBorder(JBUI.Borders.empty(3, 22, 1, 4));
+        pane.setBorder(JBUI.Borders.empty(4, 22, 3, 5));
         pane.getAccessibleContext().setAccessibleName(title + " body");
         var cached = renderedNotes.get(note.id());
         if (cached == null || !cached.markdown().equals(note.body())) {
@@ -584,7 +617,7 @@ final class HunkLineInlay implements Disposable {
         }
     }
 
-    private static void updateDisclosureAccessibility(
+    private void updateDisclosureAccessibility(
             JButton button,
             HunkSessionNote note,
             boolean expanded
@@ -670,7 +703,7 @@ final class HunkLineInlay implements Disposable {
         notes.removeAll();
         targetErrorPanel = null;
         noteCount.setText(canStartMatchingReview(value) ? "Setup needed" : "Unavailable");
-        noteScroll.setPreferredSize(new Dimension(JBUI.scale(220), JBUI.scale(142)));
+        updateMessageAreaHeight();
         renderTargetError(value);
     }
 
@@ -737,18 +770,40 @@ final class HunkLineInlay implements Disposable {
     }
 
     private void setComposerAvailable(boolean available) {
+        composerAvailable = available;
         body.setEnabled(available);
         submit.setEnabled(available);
         if (composerCard != null) {
             composerCard.setVisible(available);
         }
-        if (noteScroll != null) {
-            noteScroll.setPreferredSize(new Dimension(
-                    JBUI.scale(220),
-                    JBUI.scale(available ? 158 : 86)
-            ));
-        }
+        updateMessageAreaHeight();
         updateInlaySize();
+    }
+
+    private void updateMessageAreaHeight() {
+        if (noteScroll == null) {
+            return;
+        }
+        var height = messagesExpanded
+                ? EXPANDED_MESSAGES_HEIGHT
+                : composerAvailable ? COMPACT_MESSAGES_HEIGHT : UNAVAILABLE_MESSAGES_HEIGHT;
+        noteScroll.setPreferredSize(new Dimension(JBUI.scale(220), JBUI.scale(height)));
+    }
+
+    private void resolveReviewerName() {
+        project.getService(HunkReviewerIdentity.class)
+                .reviewerName(target.repositoryRoot())
+                .thenAccept(resolved -> ApplicationManager.getApplication().invokeLater(() -> {
+                    if (!isOpen() || resolved.equals(reviewerName)) {
+                        return;
+                    }
+                    reviewerName = resolved;
+                    var rendered = lastRenderedNotes;
+                    lastRenderedNotes = null;
+                    if (rendered != null) {
+                        renderNotes(rendered);
+                    }
+                }));
     }
 
     private String connectionMessage(String value) {
@@ -981,18 +1036,15 @@ final class HunkLineInlay implements Disposable {
         }
     }
 
-    private static String noteMetadata(HunkSessionNote note) {
+    private String noteMetadata(HunkSessionNote note) {
         var values = new ArrayList<String>();
         values.add(displayAuthor(note));
         formatTime(note.createdAt()).ifPresent(values::add);
         return String.join(" · ", values);
     }
 
-    private static String displayAuthor(HunkSessionNote note) {
-        if (note.author() != null && !note.author().isBlank()) {
-            return note.author().trim();
-        }
-        return note.isReviewerComment() ? "Reviewer" : "Hunk agent";
+    private String displayAuthor(HunkSessionNote note) {
+        return HunkReviewerIdentity.displayAuthor(note, reviewerName);
     }
 
     private static java.util.Optional<String> formatTime(String value) {
@@ -1003,6 +1055,13 @@ final class HunkLineInlay implements Disposable {
     private void updateComposerResizeButton(JButton button) {
         var action = composerExpanded ? "Use compact comment editor" : "Expand comment editor";
         button.setIcon(composerExpanded ? AllIcons.Actions.Collapseall : AllIcons.Actions.Expandall);
+        button.setToolTipText(action);
+        button.getAccessibleContext().setAccessibleName(action);
+    }
+
+    private void updateMessagesResizeButton(JButton button) {
+        var action = messagesExpanded ? "Use compact thread messages" : "Expand thread messages";
+        button.setIcon(messagesExpanded ? AllIcons.Actions.Collapseall : AllIcons.Actions.Expandall);
         button.setToolTipText(action);
         button.getAccessibleContext().setAccessibleName(action);
     }
@@ -1061,7 +1120,7 @@ final class HunkLineInlay implements Disposable {
     }
 
     /** Lightweight rounded native surface that follows JetBrains light and dark themes. */
-    private static final class RoundedPanel extends JPanel {
+    private static class RoundedPanel extends JPanel {
         private final Color fill;
         private final Color outline;
         private final int arc;
@@ -1087,6 +1146,18 @@ final class HunkLineInlay implements Disposable {
                 copy.dispose();
             }
             super.paintComponent(graphics);
+        }
+    }
+
+    /** Lets BoxLayout use the viewport width without stretching a short comment vertically. */
+    private static final class NaturalHeightRoundedPanel extends RoundedPanel {
+        private NaturalHeightRoundedPanel(Color fill, Color outline, int arc) {
+            super(fill, outline, arc);
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
         }
     }
 
