@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+display_backend="${1:-native}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+if [[ $# -eq 0 ]]; then
+  gradle_arguments=(integrationTest)
+else
+  gradle_arguments=("$@")
+fi
+gradle_arguments+=(--console=plain --no-daemon)
+
+gradle=("$project_root/gradlew" "${gradle_arguments[@]}")
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "The '$display_backend' display adapter requires '$1' on PATH." >&2
+    exit 2
+  fi
+}
+
+case "$display_backend" in
+  native)
+    exec "${gradle[@]}" -PuiDisplayBackend=native
+    ;;
+
+  xvfb)
+    require_command xvfb-run
+    exec xvfb-run \
+      --auto-servernum \
+      --server-args="-screen 0 1920x1080x24" \
+      "${gradle[@]}" \
+      -PuiDisplayBackend=xvfb \
+      -PuiToolkit=XToolkit
+    ;;
+
+  weston)
+    require_command weston
+    runtime_directory="$(mktemp -d "${TMPDIR:-/tmp}/hunk-goland-weston.XXXXXX")"
+    chmod 700 "$runtime_directory"
+    socket="hunk-goland-test"
+    mkdir -p "$project_root/build/reports"
+    weston_log="$project_root/build/reports/weston.log"
+
+    XDG_RUNTIME_DIR="$runtime_directory" weston \
+      --no-config \
+      --backend=headless \
+      --renderer=pixman \
+      --width=1920 \
+      --height=1080 \
+      --fake-seat \
+      --idle-time=0 \
+      --socket="$socket" \
+      --log="$weston_log" &
+    weston_pid=$!
+
+    cleanup_weston() {
+      if kill -0 "$weston_pid" 2>/dev/null; then
+        kill "$weston_pid"
+        wait "$weston_pid" 2>/dev/null || true
+      fi
+      case "$runtime_directory" in
+        "${TMPDIR:-/tmp}"/hunk-goland-weston.??????)
+          rm -rf -- "$runtime_directory"
+          ;;
+        *)
+          echo "Refusing to remove unexpected Weston runtime directory: $runtime_directory" >&2
+          ;;
+      esac
+    }
+    trap cleanup_weston EXIT
+
+    for _ in {1..100}; do
+      if [[ -S "$runtime_directory/$socket" ]]; then
+        break
+      fi
+      if ! kill -0 "$weston_pid" 2>/dev/null; then
+        echo "Weston exited before creating its Wayland socket:" >&2
+        cat "$weston_log" >&2
+        exit 1
+      fi
+      sleep 0.1
+    done
+    if [[ ! -S "$runtime_directory/$socket" ]]; then
+      echo "Weston did not create its Wayland socket within 10 seconds." >&2
+      exit 1
+    fi
+
+    # Starter currently assumes a missing DISPLAY means it should launch its own Xvfb.
+    # A deliberately unreachable X display prevents that fallback; WLToolkit uses only Wayland.
+    DISPLAY=:9876 \
+      XDG_RUNTIME_DIR="$runtime_directory" \
+      WAYLAND_DISPLAY="$socket" \
+      "${gradle[@]}" \
+      -PuiDisplayBackend=weston \
+      -PuiToolkit=WLToolkit
+    ;;
+
+  *)
+    echo "Unknown display adapter '$display_backend'. Choose native, xvfb, or weston." >&2
+    exit 2
+    ;;
+esac
