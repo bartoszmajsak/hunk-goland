@@ -171,6 +171,10 @@ class UxReport private constructor(
                 <code>source: "user"</code> note, an externally added
                 <code>source: "agent"</code> response, and native deletion. Its machine-readable
                 result is <a href="real-daemon-e2e.json">real-daemon-e2e.json</a>.</p>
+                <p>The restart/recovery UX is captured separately in
+                <a href="recovery/index.html">recovery/index.html</a>.</p>
+                <p>The shared Compare-with-Branch/source-editor context is captured separately in
+                <a href="cross-view/index.html">cross-view/index.html</a>.</p>
               </section>
               <footer>Images are deterministic test artifacts, not mocked UI renderings.</footer>
             </body>
@@ -195,17 +199,34 @@ class UxReport private constructor(
 
     companion object {
         fun configured(): UxReport {
-            val output = Path.of(System.getProperty("hunk.uxReportDir")).toAbsolutePath().normalize()
+            val output = configuredOutput()
+            clearScreenshots(output)
+            return UxReport(
+                output,
+                System.getProperty("hunk.uiDisplayBackend", "native"),
+            )
+        }
+
+        fun configuredSubreport(directory: String): UxReport {
+            require(directory.matches(Regex("[a-z0-9-]+"))) { "Invalid UX subreport name" }
+            val output = configuredOutput().resolve(directory)
+            clearScreenshots(output)
+            return UxReport(
+                output,
+                System.getProperty("hunk.uiDisplayBackend", "native"),
+            )
+        }
+
+        private fun configuredOutput(): Path =
+            Path.of(System.getProperty("hunk.uxReportDir")).toAbsolutePath().normalize()
+
+        private fun clearScreenshots(output: Path) {
             if (Files.isDirectory(output)) {
                 Files.list(output).use { entries ->
                     entries.filter { it.fileName.toString().matches(Regex("\\d{2}-.*\\.png")) }
                         .forEach(Files::deleteIfExists)
                 }
             }
-            return UxReport(
-                output,
-                System.getProperty("hunk.uiDisplayBackend", "native"),
-            )
         }
 
         private fun escape(value: String): String = buildString(value.length) {

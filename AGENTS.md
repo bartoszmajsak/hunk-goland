@@ -26,6 +26,12 @@ coverage.
 
 - The daemon is a broker, not a review owner. A live `hunk diff ... --watch` TUI owns the in-memory
   review state. Notes are not durable after that process exits.
+- Local restart recovery is not native Hunk persistence. Replay reviewer comments only through the
+  owned native composer, accept their new Hunk IDs/timestamps, and keep missing agent responses as
+  explicitly labeled read-only local history. Never turn agent history into `source: "user"`.
+- Guard recovery with the exact repository/comparison fingerprint, including resolved Git commits,
+  Hunk hunk structure, and working-tree file contents. If the fingerprint is unavailable or stale,
+  do not replay. Keep the cache non-roaming, bounded, and outside the repository.
 - `hunk session list`'s `comments:` field is `liveCommentCount` for agent annotations, not the
   reviewer-note count. Inspect `reviewNotes` with `hunk session review <id> --include-notes` and
   classify individual entries by `source`; `reviewNoteCount` includes agent entries when present.
@@ -38,6 +44,9 @@ coverage.
 - Match the actual JetBrains comparison, not only the repository root: working tree uses
   `hunk diff --watch`, base/current comparison uses `hunk diff <base> --watch`, and concrete
   revisions use `hunk diff <before>..<after> --watch`.
+- A normal editor must inherit the active IDE-managed current-version review for its repository.
+  It must not replace a branch comparison with `hunk diff --watch` merely because normal editors
+  lack diff-local VCS metadata. Fixed revision ranges remain diff-only.
 - The session WebSocket is a producer channel. Protected review SSE needs a clear capability that a
   stock external TUI does not delegate to the plugin. Until upstream supplies delegation, bounded
   two-second `/session-api` polling is the supported two-way refresh path.
@@ -74,6 +83,8 @@ coverage.
   long wrapped multiline Markdown body, another comment after navigation, an external agent update,
   exact daemon verification, live `hunk session review --include-notes --json` inspection, and
   selective deletion.
+- Keep the same-profile real-GoLand restart gate: the original managed TUI must exit, a fresh session
+  must receive recovered reviewer comments as `source: "user"`, and agent history must remain local.
 - Keep `realProjectDiagnostic` as an optional but gating reproduction for the KServe **Compare with
   Branch** regression. It may use a user-supplied checkout, but the normal suite must not.
 - Preserve the human report and screenshots under `build/reports/ux/` and the native daemon evidence

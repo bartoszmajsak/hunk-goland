@@ -8,12 +8,8 @@ import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.components.elements.button
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import com.intellij.ide.starter.models.IdeInfo
-import com.intellij.ide.starter.models.TestCase
 import com.intellij.ide.starter.plugins.PluginConfigurator
-import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
-import com.intellij.tools.ide.starter.product.goland.GoLand
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -36,7 +32,7 @@ class HunkReviewCommentUiTest {
                 val pluginPath = Path.of(System.getProperty("path.to.build.plugin"))
                 val context = Starter.newContext(
                     "hunk-review-comment-editor-${System.nanoTime()}",
-                    TestCase(IdeInfo.GoLand, LocalProjectInfo(project)),
+                    goLandTestCase(project),
                 ).apply {
                     preserveSystemDir = true
                     PluginConfigurator(this).installPluginFromPath(pluginPath)
@@ -464,11 +460,12 @@ class HunkReviewCommentUiTest {
         TestGoProject.checkoutFeature(project)
         val baseline = TestGoProject.resolveRevision(project, TestGoProject.BASELINE_BRANCH)
         val fakeHunk = installFakeHunk(temporaryDirectory)
+        val ux = UxReport.configuredSubreport("cross-view")
 
         FakeHunkDaemon.start(TEST_AUTHOR).use { daemon ->
             Starter.newContext(
                 "hunk-compare-with-current-${System.nanoTime()}",
-                TestCase(IdeInfo.GoLand, LocalProjectInfo(project)),
+                goLandTestCase(project),
             ).apply {
                 PluginConfigurator(this).installPluginFromPath(
                     Path.of(System.getProperty("path.to.build.plugin")),
@@ -525,8 +522,59 @@ class HunkReviewCommentUiTest {
                 )
                 assertThat(frame.button { byAccessibleName("Add comment") }.component.isShowing())
                     .isTrue()
+
+                ui.submitCommentWithButton(BRANCH_DIFF_COMMENT)
+                val diffRequest = daemon.takeReviewAction("Compare with Branch diff")
+                HunkReviewActionAssert.assertThat(diffRequest)
+                    .targetsRepository(project)
+                    .targetsFile(TestGoProject.ADDED_FILE)
+                    .addsComment(TestGoProject.ADDED_FILE_LINE, BRANCH_DIFF_COMMENT)
+                ux.recordRequest(diffRequest)
+                ui.waitForSubmission(
+                    TestGoProject.ADDED_FILE_LINE,
+                    filePath = TestGoProject.ADDED_FILE,
+                )
+                ux.capture(
+                    frame,
+                    "01-branch-diff-comment",
+                    "Comment in Compare with Branch",
+                    "The current/right diff pane saves a reviewer comment into the base-to-working-tree Hunk review.",
+                )
+                ui.closeThread(editor)
+
+                openFile(TestGoProject.ADDED_FILE)
+                val sourceEditor = frame.codeEditorForFile("added.go")
+                sourceEditor.goToPosition(TestGoProject.ADDED_FILE_LINE, 2)
+                ui.openThread(sourceEditor)
+                awaitCondition("diff comment visible in the ordinary editor") {
+                    frame.x { byVisibleText(BRANCH_DIFF_COMMENT) }
+                        .let { it.present() && it.component.isShowing() }
+                }
+                ux.capture(
+                    frame,
+                    "02-shared-source-thread",
+                    "The same review in the source editor",
+                    "Opening the file normally keeps the active branch-review context and shows the comment created in the diff.",
+                )
+
+                ui.submitCommentWithShortcut(SOURCE_EDITOR_COMMENT)
+                val sourceRequest = daemon.takeReviewAction("ordinary editor sharing branch review")
+                HunkReviewActionAssert.assertThat(sourceRequest)
+                    .targetsRepository(project)
+                    .targetsFile(TestGoProject.ADDED_FILE)
+                    .addsComment(TestGoProject.ADDED_FILE_LINE, SOURCE_EDITOR_COMMENT)
+                ux.recordRequest(sourceRequest)
+                ui.waitForSubmission(
+                    TestGoProject.ADDED_FILE_LINE,
+                    filePath = TestGoProject.ADDED_FILE,
+                )
+
+                assertThat(Files.readAllLines(fakeHunk.evidence)).containsExactlyElementsOf(
+                    launchEvidence,
+                )
             }
         }
+        ux.finish("passed")
     }
 
     private companion object {
@@ -538,6 +586,8 @@ class HunkReviewCommentUiTest {
         const val RIGHT_SIDE_COMMENT = "Please verify the new-side behavior here."
         const val UNIFIED_COMMENT = "Keep this unified-view line mapping exact."
         const val ADDED_FILE_COMMENT = "Please review this newly added greeting."
+        const val BRANCH_DIFF_COMMENT = "This comment starts in Compare with Branch."
+        const val SOURCE_EDITOR_COMMENT = "This source view shares the branch review."
         const val CLEAN_LINE_COMMENT = "First comment on this line.\n\n- Markdown stays multiline."
 
         fun installFakeHunk(directory: Path): FakeHunk {

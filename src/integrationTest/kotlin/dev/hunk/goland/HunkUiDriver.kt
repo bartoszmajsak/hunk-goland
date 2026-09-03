@@ -431,8 +431,12 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         }
     }
 
-    fun waitForSubmission(line: Int, side: String = "new") {
-        val message = "Comment submitted on cmd/main.go:$line ($side)."
+    fun waitForSubmission(
+        line: Int,
+        side: String = "new",
+        filePath: String = TestGoProject.MAIN_FILE,
+    ) {
+        val message = "Comment submitted on $filePath:$line ($side)."
         awaitCondition("$side-side submission confirmation") {
             val composer = frame.textField { byAccessibleName("Hunk review comment") }
             frame.x { byVisibleText(message) }.present() && composer.text.isEmpty()

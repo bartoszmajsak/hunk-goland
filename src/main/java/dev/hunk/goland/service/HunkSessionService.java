@@ -9,6 +9,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import dev.hunk.goland.model.HunkNoteSource;
+import dev.hunk.goland.model.HunkReviewInput;
 import dev.hunk.goland.model.HunkReviewNote;
 import dev.hunk.goland.model.HunkSessionNote;
 import dev.hunk.goland.model.ReviewSide;
@@ -23,10 +24,12 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -52,17 +55,36 @@ public final class HunkSessionService {
             .connectTimeout(TIMEOUT)
             .build();
     private final HunkReviewLauncher launcher;
+    private final HunkReviewRecovery recovery;
+    private final Object recoveryLock = new Object();
+    private final Map<RecoveredSessionKey, RecoveredSession> recoveredSessions = new HashMap<>();
+    private final Map<RecoveryContextKey, String> recoveryNotices = new HashMap<>();
+    private final Map<String, VerifiedFingerprint> verifiedFingerprints = new HashMap<>();
 
     public HunkSessionService(Project project) {
         launcher = project.getService(HunkReviewLauncher.class);
+        recovery = project.getService(HunkReviewRecovery.class);
     }
 
     public void addReviewComment(ReviewTarget target, String body)
             throws HunkSessionException {
         var settings = HunkSettings.getInstance().getState();
         var origin = origin(settings.host, settings.port);
+        var reviewBefore = readReview(origin, target, true);
+        submitReviewerComment(origin, target, body, reviewBefore, "review-comment-submit");
+        // Persist the daemon-confirmed state before reporting success to the editor. This closes
+        // the small window where a plugin update could otherwise lose the just-added comment.
+        readReview(origin, target, true);
+    }
+
+    private HunkReviewNote submitReviewerComment(
+            URI origin,
+            ReviewTarget target,
+            String body,
+            JsonObject reviewBefore,
+            String event
+    ) throws HunkSessionException {
         var normalizedBody = body.replace("\r\n", "\n").replace('\r', '\n');
-        var reviewBefore = readReview(origin, target);
         validateLineTarget(reviewBefore, target);
         if (!launcher.owns(target)) {
             throw unmanagedReview();
@@ -72,16 +94,8 @@ public final class HunkSessionService {
                 .map(HunkSessionNote::id)
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
 
-        requireCapability(origin, NAVIGATE);
-        var navigate = new JsonObject();
-        navigate.addProperty("action", NAVIGATE);
-        navigate.add("selector", selector(target));
-        navigate.addProperty("filePath", target.filePath());
-        navigate.addProperty("side", target.side().wireName());
-        navigate.addProperty("line", target.line());
-        responseObject(post(origin.resolve("/session-api"), navigate), NAVIGATE);
-
-        LOG.info("event=review-comment-submit-start"
+        navigate(origin, target);
+        LOG.info("event=" + event + "-start"
                 + " sessionId=" + launcher.sessionId(target).orElse("unknown")
                 + " target=" + target.displayName()
                 + " existingNotes=" + existingNoteIds.size()
@@ -95,7 +109,7 @@ public final class HunkSessionService {
                     normalizedBody,
                     existingNoteIds
             );
-            LOG.info("event=review-comment-submit-succeeded"
+            LOG.info("event=" + event + "-succeeded"
                     + " sessionId=" + launcher.sessionId(target).orElse("unknown")
                     + " target=" + target.displayName()
                     + " noteId=" + persisted.note().id()
@@ -104,9 +118,10 @@ public final class HunkSessionService {
                     + " elapsedMs=" + TimeUnit.NANOSECONDS.toMillis(
                             System.nanoTime() - startedAt
                     ));
+            return persisted;
         } catch (HunkSessionException error) {
             launcher.recoverReviewerComposer(target, "daemon-persistence-unconfirmed");
-            LOG.warn("event=review-comment-submit-failed"
+            LOG.warn("event=" + event + "-failed"
                     + " sessionId=" + launcher.sessionId(target).orElse("unknown")
                     + " target=" + target.displayName()
                     + " relayAttempts=" + relay.attempts()
@@ -116,6 +131,17 @@ public final class HunkSessionService {
                     ), error);
             throw error;
         }
+    }
+
+    private void navigate(URI origin, ReviewTarget target) throws HunkSessionException {
+        requireCapability(origin, NAVIGATE);
+        var navigate = new JsonObject();
+        navigate.addProperty("action", NAVIGATE);
+        navigate.add("selector", selector(target));
+        navigate.addProperty("filePath", target.filePath());
+        navigate.addProperty("side", target.side().wireName());
+        navigate.addProperty("line", target.line());
+        responseObject(post(origin.resolve("/session-api"), navigate), NAVIGATE);
     }
 
     private HunkReviewNote awaitPersistedReviewerNote(
@@ -288,6 +314,7 @@ public final class HunkSessionService {
         payload.add("selector", selector(target));
         payload.addProperty("commentId", noteId);
         requireRemoved(responseObject(post(origin.resolve("/session-api"), payload), REMOVE_COMMENT));
+        readReview(origin, target, true);
     }
 
     /** Verifies that a line has a native address in the active Hunk review. */
@@ -320,6 +347,13 @@ public final class HunkSessionService {
         var settings = HunkSettings.getInstance().getState();
         var origin = origin(settings.host, settings.port);
         return reviewNotes(readReview(origin, target));
+    }
+
+    /** A non-blocking explanation of the most recent recovery decision for this comparison. */
+    public Optional<String> recoveryNotice(ReviewTarget target) {
+        synchronized (recoveryLock) {
+            return Optional.ofNullable(recoveryNotices.get(RecoveryContextKey.from(target)));
+        }
     }
 
     static List<HunkReviewNote> reviewNotes(JsonObject review) {
@@ -373,9 +407,215 @@ public final class HunkSessionService {
     }
 
     private JsonObject readReview(URI origin, ReviewTarget target) throws HunkSessionException {
-        requireCapability(origin, READ_REVIEW);
+        return readReview(origin, target, false);
+    }
 
-        return requestReview(origin, target);
+    private JsonObject readReview(
+            URI origin,
+            ReviewTarget target,
+            boolean verifyFingerprint
+    ) throws HunkSessionException {
+        requireCapability(origin, READ_REVIEW);
+        return reconcileReview(origin, target, requestReview(origin, target), verifyFingerprint);
+    }
+
+    private JsonObject reconcileReview(
+            URI origin,
+            ReviewTarget target,
+            JsonObject liveReview,
+            boolean verifyFingerprint
+    ) throws HunkSessionException {
+        if (!launcher.owns(target)) {
+            return liveReview;
+        }
+        var sessionId = string(liveReview, "sessionId");
+        if (sessionId == null || sessionId.isBlank()) {
+            return liveReview;
+        }
+
+        synchronized (recoveryLock) {
+            var nativeNotes = reviewNotes(liveReview);
+            var shape = HunkReviewFingerprint.shape(target.reviewInput(), liveReview);
+            var verified = verifiedFingerprints.get(sessionId);
+            if (verifyFingerprint
+                    || verified == null
+                    || !verified.shape().equals(shape)
+                    || !verified.nativeNotes().equals(nativeNotes)) {
+                var fingerprint = HunkReviewFingerprint.compute(
+                        target.repositoryRoot(),
+                        target.reviewInput(),
+                        liveReview
+                );
+                if (fingerprint.isEmpty()) {
+                    HunkDiagnostics.warning(LOG, "review-recovery-skipped", () -> "sessionId=" + sessionId
+                            + " target=" + target.displayName()
+                            + " reason=fingerprint-unavailable");
+                    recoveryNotices.put(
+                            RecoveryContextKey.from(target),
+                            "Locally saved review items were not restored because the comparison "
+                                    + "identity could not be verified."
+                    );
+                    return liveReview;
+                }
+                verified = new VerifiedFingerprint(shape, fingerprint.get(), nativeNotes);
+                verifiedFingerprints.put(sessionId, verified);
+            }
+
+            var exactFingerprint = verified.fingerprint();
+            var key = new RecoveredSessionKey(sessionId, exactFingerprint);
+            var remembered = recoveredSessions.get(key);
+            var current = liveReview;
+            if (remembered == null) {
+                var plan = recovery.plan(target, exactFingerprint, nativeNotes);
+                var reviewerCreationTimes = new HashMap<String, String>();
+                HunkDiagnostics.info(LOG, "review-recovery-plan", () -> "sessionId=" + sessionId
+                        + " target=" + target.displayName()
+                        + " reviewerComments=" + plan.reviewerComments().size()
+                        + " agentHistory=" + plan.agentHistory().size()
+                        + " staleNotes=" + plan.staleNoteCount());
+                for (var reviewNote : plan.reviewerComments()) {
+                    var note = reviewNote.note();
+                    var replayTarget = new ReviewTarget(
+                            target.repositoryRoot(),
+                            reviewNote.filePath(),
+                            note.side(),
+                            note.line(),
+                            target.reviewInput()
+                    );
+                    var persisted = submitReviewerComment(
+                            origin,
+                            replayTarget,
+                            note.body(),
+                            current,
+                            "review-comment-recovery"
+                    );
+                    if (note.createdAt() != null) {
+                        reviewerCreationTimes.put(persisted.note().id(), note.createdAt());
+                    }
+                    current = requestReview(origin, target);
+                }
+                // An agent response cannot be recreated with reviewer provenance. Keep it as
+                // explicit local history unless it independently reappeared during replay.
+                var finalPlan = recovery.plan(target, exactFingerprint, reviewNotes(current));
+                remembered = new RecoveredSession(
+                        finalPlan.agentHistory(),
+                        recoveryNotice(plan),
+                        Map.copyOf(reviewerCreationTimes),
+                        null
+                );
+                recoveredSessions.put(key, remembered);
+            }
+
+            var context = RecoveryContextKey.from(target);
+            if (remembered.notice() == null) {
+                recoveryNotices.remove(context);
+            } else {
+                recoveryNotices.put(
+                        context,
+                        remembered.notice()
+                );
+            }
+
+            var presented = presentRecoveredReviewerTimes(
+                    reviewNotes(current),
+                    remembered.reviewerCreationTimes()
+            );
+            var merged = HunkReviewRecovery.mergeWithAgentHistory(
+                    presented,
+                    remembered.agentHistory()
+            );
+            if (!Objects.equals(remembered.checkpointedNotes(), merged)) {
+                recovery.checkpoint(target, exactFingerprint, merged);
+                remembered = new RecoveredSession(
+                        remembered.agentHistory(),
+                        remembered.notice(),
+                        remembered.reviewerCreationTimes(),
+                        merged
+                );
+                recoveredSessions.put(key, remembered);
+            }
+            verifiedFingerprints.put(
+                    sessionId,
+                    new VerifiedFingerprint(shape, exactFingerprint, reviewNotes(current))
+            );
+            return withProjectedNotes(current, merged);
+        }
+    }
+
+    static List<HunkReviewNote> presentRecoveredReviewerTimes(
+            List<HunkReviewNote> liveNotes,
+            Map<String, String> creationTimes
+    ) {
+        if (creationTimes.isEmpty()) {
+            return liveNotes;
+        }
+        return liveNotes.stream()
+                .map(reviewNote -> {
+                    var createdAt = creationTimes.get(reviewNote.note().id());
+                    return createdAt == null
+                            ? reviewNote
+                            : new HunkReviewNote(
+                                    reviewNote.filePath(),
+                                    reviewNote.note().withDisplayedCreationTime(createdAt)
+                            );
+                })
+                .toList();
+    }
+
+    static String recoveryNotice(HunkReviewRecovery.RecoveryPlan plan) {
+        if (plan.staleNoteCount() > 0) {
+            return plan.staleNoteCount() + (plan.staleNoteCount() == 1
+                    ? " locally saved review item was"
+                    : " locally saved review items were")
+                    + " not restored because the comparison changed.";
+        }
+        var reviewers = plan.reviewerComments().size();
+        var agents = plan.agentHistory().size();
+        if (reviewers == 0 && agents == 0) {
+            return null;
+        }
+        var restored = reviewers == 0
+                ? ""
+                : "Restored " + reviewers + (reviewers == 1 ? " reviewer comment" : " reviewer comments");
+        var history = agents == 0
+                ? ""
+                : (restored.isEmpty() ? "Showing " : "; showing ") + agents
+                        + (agents == 1 ? " agent response" : " agent responses")
+                        + " from local history";
+        return restored + history + ".";
+    }
+
+    private static JsonObject withProjectedNotes(
+            JsonObject review,
+            List<HunkReviewNote> notes
+    ) {
+        if (notes.equals(reviewNotes(review))) {
+            return review;
+        }
+        var values = new JsonArray();
+        notes.forEach(note -> values.add(noteJson(note)));
+        review.add("reviewNotes", values);
+        return review;
+    }
+
+    private static JsonObject noteJson(HunkReviewNote reviewNote) {
+        var note = reviewNote.note();
+        var value = new JsonObject();
+        value.addProperty("noteId", note.id());
+        value.addProperty("source", note.source() == HunkNoteSource.USER ? "user" : "agent");
+        value.addProperty("filePath", reviewNote.filePath());
+        value.addProperty("body", note.body());
+        if (note.author() != null) {
+            value.addProperty("author", note.author());
+        }
+        if (note.createdAt() != null) {
+            value.addProperty("createdAt", note.createdAt());
+        }
+        value.addProperty("side", note.side().wireName());
+        value.addProperty("line", note.line());
+        value.addProperty("editable", note.editable());
+        value.addProperty("recoveredLocally", note.recovered());
+        return value;
     }
 
     private JsonObject requestReview(URI origin, ReviewTarget target) throws HunkSessionException {
@@ -525,7 +765,8 @@ public final class HunkSessionService {
                     string(value, "createdAt"),
                     location.side(),
                     location.line(),
-                    booleanValue(value.get("editable")).orElse(source == HunkNoteSource.USER)
+                    booleanValue(value.get("editable")).orElse(source == HunkNoteSource.USER),
+                    booleanValue(value.get("recoveredLocally")).orElse(false)
             ));
         } catch (RuntimeException ignored) {
             return Optional.empty();
@@ -726,6 +967,33 @@ public final class HunkSessionService {
     }
 
     private record NoteLocation(ReviewSide side, int line) {
+    }
+
+    private record RecoveredSessionKey(String sessionId, String fingerprint) {
+    }
+
+    private record RecoveredSession(
+            List<HunkReviewNote> agentHistory,
+            String notice,
+            Map<String, String> reviewerCreationTimes,
+            List<HunkReviewNote> checkpointedNotes
+    ) {
+    }
+
+    private record RecoveryContextKey(String repositoryRoot, HunkReviewInput input) {
+        static RecoveryContextKey from(ReviewTarget target) {
+            return new RecoveryContextKey(
+                    target.repositoryRoot().toString(),
+                    target.reviewInput()
+            );
+        }
+    }
+
+    private record VerifiedFingerprint(
+            String shape,
+            String fingerprint,
+            List<HunkReviewNote> nativeNotes
+    ) {
     }
 
 }

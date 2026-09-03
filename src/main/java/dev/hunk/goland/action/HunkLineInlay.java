@@ -378,9 +378,7 @@ final class HunkLineInlay implements Disposable {
                         targetErrorPanel = null;
                     }
                     setComposerAvailable(true);
-                    if ("Connecting…".equals(status.getText())) {
-                        showStatus("");
-                    }
+                    showStatus(service.recoveryNotice(target).orElse(""));
                     if (revealAfterInitialLoad) {
                         revealAfterInitialLoad = false;
                         revealComposer();
@@ -486,7 +484,7 @@ final class HunkLineInlay implements Disposable {
         }
         noteCount.setText(countLabel(ordered));
         if (commentTargetReady && "Connecting…".equals(status.getText())) {
-            showStatus("");
+            showStatus(service.recoveryNotice(target).orElse(""));
         }
         refreshNotesPanel();
         if (revealAfterInitialLoad && commentTargetReady) {
@@ -519,7 +517,9 @@ final class HunkLineInlay implements Disposable {
         var metadata = secondaryLabel(noteMetadata(note));
         metadata.setBorder(JBUI.Borders.emptyTop(2));
         metadata.getAccessibleContext().setAccessibleName(
-                title + " author: " + displayAuthor(note)
+                note.recovered()
+                        ? title + " recovered locally"
+                        : title + " author: " + displayAuthor(note)
         );
         var headingStack = verticalStack(heading, metadata);
 
@@ -1040,6 +1040,9 @@ final class HunkLineInlay implements Disposable {
         var values = new ArrayList<String>();
         values.add(displayAuthor(note));
         formatTime(note.createdAt()).ifPresent(values::add);
+        if (note.recovered()) {
+            values.add("Recovered locally");
+        }
         return String.join(" · ", values);
     }
 

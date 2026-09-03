@@ -35,6 +35,7 @@ import dev.hunk.goland.model.HunkReviewInput;
 import dev.hunk.goland.model.PathMapping;
 import dev.hunk.goland.model.ReviewSide;
 import dev.hunk.goland.model.ReviewTarget;
+import dev.hunk.goland.service.HunkReviewLauncher;
 
 import java.awt.Component;
 import java.nio.file.Path;
@@ -119,7 +120,7 @@ public final class ReviewTargetResolver {
                 event.getData(VcsDataKeys.CURRENT_CHANGE),
                 VcsDataKeys.CURRENT_CHANGE.getData(editorContext)
         ).orElse(null);
-        var reviewInput = reviewInput(
+        var inferredInput = reviewInput(
                 change,
                 firstPresent(
                         event.getData(VcsDataKeys.CHANGES_SELECTION),
@@ -140,6 +141,18 @@ public final class ReviewTargetResolver {
         var rootPath = repositoryRoot(project, filePath, virtualFile).orElse(null);
         if (rootPath == null) {
             return unavailable("Could not determine the repository root for this file.");
+        }
+
+        var reviewInput = contextualReviewInput(
+                isDiffEditor(editor),
+                inferredInput,
+                project.getService(HunkReviewLauncher.class).activeReviewInput(rootPath)
+        ).orElse(null);
+        if (reviewInput == null) {
+            return unavailable(
+                    "The active Hunk review compares two fixed revisions. Add comments from "
+                            + "its current/right diff view."
+            );
         }
 
         var absoluteFile = Path.of(filePath != null ? filePath.getPath() : virtualFile.getPath());
@@ -170,7 +183,7 @@ public final class ReviewTargetResolver {
         var context = DataManager.getInstance().getDataContext(editor.getContentComponent());
         var request = DiffDataKeys.DIFF_REQUEST.getData(context);
         var change = VcsDataKeys.CURRENT_CHANGE.getData(context);
-        var reviewInput = reviewInput(
+        var inferredInput = reviewInput(
                 change,
                 VcsDataKeys.CHANGES_SELECTION.getData(context),
                 requestInput(request).or(() -> comparisonInput(editor))
@@ -193,6 +206,18 @@ public final class ReviewTargetResolver {
         var rootPath = repositoryRoot(project, filePath, virtualFile).orElse(null);
         if (rootPath == null) {
             return unavailable("Could not determine the repository root for this file.");
+        }
+
+        var reviewInput = contextualReviewInput(
+                isDiffEditor(editor),
+                inferredInput,
+                project.getService(HunkReviewLauncher.class).activeReviewInput(rootPath)
+        ).orElse(null);
+        if (reviewInput == null) {
+            return unavailable(
+                    "The active Hunk review compares two fixed revisions. Add comments from "
+                            + "its current/right diff view."
+            );
         }
 
         var editorLine = focusedLine(editor);
@@ -350,6 +375,22 @@ public final class ReviewTargetResolver {
                 .map(Component::getClass)
                 .map(Class::getName)
                 .anyMatch(name -> name.startsWith("com.intellij.diff."));
+    }
+
+    /**
+     * Diff-local comparison metadata is authoritative. A normal editor has no such metadata, so
+     * inherit the active current-version review rather than replacing it with a working-tree-only
+     * review. Fixed revision ranges cannot be mapped safely onto mutable editor contents.
+     */
+    static Optional<HunkReviewInput> contextualReviewInput(
+            boolean diffEditor,
+            HunkReviewInput inferredInput,
+            Optional<HunkReviewInput> activeInput
+    ) {
+        if (diffEditor || activeInput.isEmpty()) {
+            return Optional.of(inferredInput);
+        }
+        return activeInput.filter(HunkReviewInput::tracksWorkingCopy);
     }
 
     /** Maps a one-based Hunk line back to the visual editor line used by inlays and markers. */

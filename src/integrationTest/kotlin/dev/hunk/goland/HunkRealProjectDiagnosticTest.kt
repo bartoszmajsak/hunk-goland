@@ -12,12 +12,8 @@ import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.remote.SwingHierarchyService
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import com.intellij.ide.starter.models.IdeInfo
-import com.intellij.ide.starter.models.TestCase
 import com.intellij.ide.starter.plugins.PluginConfigurator
-import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
-import com.intellij.tools.ide.starter.product.goland.GoLand
 import org.assertj.core.api.SoftAssertions.assertSoftly
 import org.junit.jupiter.api.Test
 import java.net.URI
@@ -146,7 +142,7 @@ class HunkRealProjectDiagnosticTest {
 
         val context = Starter.newContext(
             "hunk-real-project-${System.nanoTime()}",
-            TestCase(IdeInfo.GoLand, LocalProjectInfo(project)),
+            goLandTestCase(project),
         ).apply {
             existingConfig?.let(::copyExistingConfig)
             preserveSystemDir = true

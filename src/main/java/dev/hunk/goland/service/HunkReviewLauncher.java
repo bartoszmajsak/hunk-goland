@@ -107,6 +107,23 @@ public final class HunkReviewLauncher implements Disposable {
         }
     }
 
+    /**
+     * Returns the input owned by the live IDE-managed review for this repository.
+     *
+     * <p>Ordinary editors do not carry the VCS comparison metadata available inside a diff viewer.
+     * Returning the input while registration is still pending also prevents another view from
+     * immediately launching a competing review.</p>
+     */
+    public Optional<HunkReviewInput> activeReviewInput(Path repositoryRoot) {
+        var root = repositoryRoot.toAbsolutePath().normalize();
+        synchronized (lifecycleLock) {
+            if (active == null || !active.root().equals(root) || !active.process().isAlive()) {
+                return Optional.empty();
+            }
+            return Optional.of(active.input());
+        }
+    }
+
     public Optional<String> sessionId(ReviewTarget target) {
         synchronized (lifecycleLock) {
             if (active == null

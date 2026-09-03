@@ -11,6 +11,9 @@ public sealed interface HunkReviewInput {
 
     String commandDisplay();
 
+    /** Whether the new side of this review is the repository's current working copy. */
+    boolean tracksWorkingCopy();
+
     record WorkingTree() implements HunkReviewInput {
         @Override
         public List<String> command() {
@@ -25,6 +28,11 @@ public sealed interface HunkReviewInput {
         @Override
         public String commandDisplay() {
             return "hunk diff --watch";
+        }
+
+        @Override
+        public boolean tracksWorkingCopy() {
+            return true;
         }
     }
 
@@ -47,6 +55,11 @@ public sealed interface HunkReviewInput {
         @Override
         public String commandDisplay() {
             return "hunk diff " + abbreviatedRange() + " --watch";
+        }
+
+        @Override
+        public boolean tracksWorkingCopy() {
+            return false;
         }
 
         public String range() {
@@ -77,6 +90,11 @@ public sealed interface HunkReviewInput {
         @Override
         public String commandDisplay() {
             return "hunk diff " + abbreviate(beforeRevision) + " --watch";
+        }
+
+        @Override
+        public boolean tracksWorkingCopy() {
+            return true;
         }
     }
 

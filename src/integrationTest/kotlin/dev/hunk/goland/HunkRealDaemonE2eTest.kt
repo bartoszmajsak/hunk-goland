@@ -11,12 +11,8 @@ import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.components.elements.button
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import com.intellij.ide.starter.models.IdeInfo
-import com.intellij.ide.starter.models.TestCase
 import com.intellij.ide.starter.plugins.PluginConfigurator
-import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
-import com.intellij.tools.ide.starter.product.goland.GoLand
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -30,12 +26,190 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /** End-to-end proof against an installed, unmodified upstream Hunk binary. */
 class HunkRealDaemonE2eTest {
+    @Test
+    fun `recovers an exact review after the IDE-owned Hunk process and GoLand restart`(
+        @TempDir temporaryDirectory: Path,
+    ) {
+        val project = TestGoProject.create(temporaryDirectory)
+        val executable = resolveExecutable(System.getProperty("hunk.executable"))
+        require(Files.isExecutable(executable)) { "Missing executable upstream Hunk binary: $executable" }
+        val output = Path.of(System.getProperty("hunk.uxReportDir")).toAbsolutePath().normalize()
+        val ux = UxReport.configuredSubreport("recovery")
+        val configHome = Files.createDirectories(temporaryDirectory.resolve("xdg-config-recovery"))
+        Files.createDirectories(output)
+        var daemon: RunningDaemon? = null
+        var status = "failed"
+
+        try {
+            val runningDaemon = startDaemon(executable, output, configHome)
+            daemon = runningDaemon
+            val port = runningDaemon.port
+            val pluginPath = Path.of(System.getProperty("path.to.build.plugin"))
+            lateinit var originalSessionId: String
+
+            val ide = Starter.newContext(
+                "hunk-recovery-restart-${System.nanoTime()}",
+                goLandTestCase(project),
+            ).apply {
+                PluginConfigurator(this).installPluginFromPath(pluginPath)
+                applyVMOptionsPatch {
+                    addSystemProperty("hunk.session.port", port)
+                    addSystemProperty("hunk.executable", executable.toString())
+                    addSystemProperty("hunk.diagnostics", "true")
+                    withEnv("XDG_CONFIG_HOME", configHome.toString())
+                    System.getProperty("hunk.uiToolkit")
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { addSystemProperty("awt.toolkit.name", it) }
+                }
+                disableGotItTooltips()
+            }
+            ide.runIdeWithDriver().useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+                openFile(TestGoProject.MAIN_FILE)
+                val frame = ideFrame()
+                val ui = HunkUiDriver(frame)
+                frame.setFocus()
+                frame.driver.closeAndDisableAllBalloonNotifications()
+                val editor = frame.codeEditorForFile("main.go")
+                editor.goToPosition(TestGoProject.CHANGED_LINE, 2)
+
+                ui.openThreadWithAutomaticManagedReview(editor)
+                awaitCondition("first managed reviewer composer", 30.seconds) {
+                    frame.button { byAccessibleName("Add comment") }
+                        .let { it.present() && it.component.isShowing() }
+                }
+                originalSessionId = awaitValue("first managed recovery session", 30.seconds) {
+                    sessions(port)
+                        .singleOrNull { it.textProperty("repoRoot") == project.toString() }
+                        ?.textProperty("sessionId")
+                }
+                ui.submitCommentWithButton(RECOVERY_REVIEW_COMMENT)
+                awaitValue("comment checkpoint before restart", 30.seconds) {
+                    reviewNotes(port, originalSessionId).takeIf {
+                        HunkReviewAssert.containsNote(it, RECOVERY_REVIEW_COMMENT)
+                    }
+                }
+
+                post(
+                    port,
+                    JsonObject().apply {
+                        addProperty("action", "comment-add")
+                        add("selector", sessionSelector(originalSessionId))
+                        addProperty("filePath", TestGoProject.MAIN_FILE)
+                        addProperty("side", "new")
+                        addProperty("line", TestGoProject.CHANGED_LINE)
+                        addProperty("summary", RECOVERY_AGENT_NOTE)
+                        addProperty("author", "restart-agent")
+                        addProperty("reveal", false)
+                    },
+                )
+                awaitCondition("agent checkpoint before restart", 20.seconds) {
+                    frame.xx { byAccessibleName("Agent response body") }
+                        .list()
+                        .filter { it.component.isShowing() }
+                        .any { it.htmlInIde().contains(RECOVERY_AGENT_NOTE) }
+                }
+            }
+
+            awaitCondition("first IDE-managed review shutdown", 20.seconds) {
+                sessions(port).none { it.textProperty("sessionId") == originalSessionId }
+            }
+
+            lateinit var recoveredSessionId: String
+            ide.runIdeWithDriver().useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+                openFile(TestGoProject.MAIN_FILE)
+                val frame = ideFrame()
+                val ui = HunkUiDriver(frame)
+                frame.setFocus()
+                frame.driver.closeAndDisableAllBalloonNotifications()
+                val editor = frame.codeEditorForFile("main.go")
+                editor.goToPosition(TestGoProject.CHANGED_LINE, 2)
+
+                ui.openThreadWithAutomaticManagedReview(editor)
+                recoveredSessionId = awaitValue("replacement managed recovery session", 30.seconds) {
+                    sessions(port)
+                        .singleOrNull { session ->
+                            session.textProperty("repoRoot") == project.toString() &&
+                                session.textProperty("sessionId") != originalSessionId
+                        }
+                        ?.textProperty("sessionId")
+                }
+                val recoveredNativeReview = awaitValue(
+                    "reviewer comment replay with native provenance",
+                    40.seconds,
+                ) {
+                    reviewNotes(port, recoveredSessionId).takeIf {
+                        HunkReviewAssert.containsNote(it, RECOVERY_REVIEW_COMMENT)
+                    }
+                }
+                HunkReviewAssert.assertThat(recoveredNativeReview)
+                    .hasReviewerComment(
+                        RECOVERY_REVIEW_COMMENT,
+                        "user",
+                        TestGoProject.CHANGED_LINE,
+                    )
+                    .doesNotHaveNote(RECOVERY_AGENT_NOTE)
+
+                awaitCondition("locally recovered agent history in GoLand", 30.seconds) {
+                    frame.xx { byAccessibleName("Agent response body") }
+                        .list()
+                        .filter { it.component.isShowing() }
+                        .any { it.htmlInIde().contains(RECOVERY_AGENT_NOTE) }
+                }
+                awaitCondition("local recovery attribution in GoLand", 20.seconds) {
+                    frame.xx { byAccessibleName("Agent response recovered locally") }
+                        .list()
+                        .any { it.component.isShowing() }
+                }
+                val reviewerY = ui.messageBodyY(
+                    "Comment body",
+                    "Restore this reviewer comment",
+                )
+                val agentY = ui.messageBodyY(
+                    "Agent response body",
+                    "Keep this external agent response",
+                )
+                assertThat(reviewerY)
+                    .describedAs("recovered reviewer comment remains before its agent response")
+                    .isLessThan(agentY)
+                ux.capture(
+                    frame,
+                    "01-recovered-review",
+                    "Review recovered after GoLand restart",
+                    "The reviewer comment was replayed into a fresh upstream Hunk session with " +
+                        "reviewer provenance. The external agent response remains visible as " +
+                        "read-only local history, with explicit recovery attribution.",
+                )
+            }
+
+            Files.writeString(
+                output.resolve("real-daemon-recovery-e2e.json"),
+                JsonObject().apply {
+                    addProperty("status", "passed")
+                    addProperty("hunkVersion", hunkVersion(executable))
+                    addProperty("originalSessionId", originalSessionId)
+                    addProperty("recoveredSessionId", recoveredSessionId)
+                    addProperty("reviewerReplayedAs", "user")
+                    addProperty("agentHistory", "local-only")
+                }.toString(),
+                StandardCharsets.UTF_8,
+            )
+            status = "passed"
+        } finally {
+            ux.finish(status)
+            stopDaemon(daemon)
+        }
+    }
+
     @Test
     fun `persists reviewer comments and receives external agent updates through upstream Hunk`(
         @TempDir temporaryDirectory: Path,
@@ -62,7 +236,7 @@ class HunkRealDaemonE2eTest {
             val pluginPath = Path.of(System.getProperty("path.to.build.plugin"))
             Starter.newContext(
                 "hunk-real-daemon-${System.nanoTime()}",
-                TestCase(IdeInfo.GoLand, LocalProjectInfo(project)),
+                goLandTestCase(project),
             ).apply {
                 PluginConfigurator(this).installPluginFromPath(pluginPath)
                 applyVMOptionsPatch {
@@ -297,7 +471,7 @@ class HunkRealDaemonE2eTest {
             }
         } finally {
             stopTree(externalReview?.process)
-            stopTree(daemon?.process)
+            stopDaemon(daemon)
         }
     }
 
@@ -365,7 +539,19 @@ class HunkRealDaemonE2eTest {
                     }
                     runCatching { capabilities(port) }.isSuccess
                 }
-                return RunningDaemon(port, process)
+                val keepAlive = Executors.newSingleThreadScheduledExecutor { task ->
+                    Thread.ofPlatform()
+                        .daemon()
+                        .name("real-hunk-daemon-keepalive-$port")
+                        .unstarted(task)
+                }
+                keepAlive.scheduleAtFixedRate(
+                    { runCatching { capabilities(port) } },
+                    DAEMON_KEEPALIVE_SECONDS,
+                    DAEMON_KEEPALIVE_SECONDS,
+                    TimeUnit.SECONDS,
+                )
+                return RunningDaemon(port, process, keepAlive)
             } catch (error: Exception) {
                 lastFailure = error
                 stopTree(process)
@@ -486,6 +672,11 @@ class HunkRealDaemonE2eTest {
         }
     }
 
+    private fun stopDaemon(daemon: RunningDaemon?) {
+        daemon?.keepAlive?.shutdownNow()
+        stopTree(daemon?.process)
+    }
+
     private fun reservePort(): Int = ServerSocket(0).use { it.localPort }
 
     private fun resolveExecutable(value: String): Path {
@@ -510,11 +701,16 @@ class HunkRealDaemonE2eTest {
     private fun readLog(log: Path): String =
         runCatching { Files.readString(log).takeLast(4_000) }.getOrElse { "log unavailable: ${it.message}" }
 
-    private data class RunningDaemon(val port: Int, val process: Process)
+    private data class RunningDaemon(
+        val port: Int,
+        val process: Process,
+        val keepAlive: ScheduledExecutorService,
+    )
 
     private data class RunningReview(val sessionId: String, val process: Process)
 
     private companion object {
+        const val DAEMON_KEEPALIVE_SECONDS = 15L
         val client: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
         const val REVIEW_COMMENT = "Persist this reviewer comment in the live Hunk session."
         const val WRAPPED_MARKDOWN_COMMENT =
@@ -526,6 +722,10 @@ class HunkRealDaemonE2eTest {
         const val AFTER_NAVIGATION_COMMENT =
             "A third reviewer comment still works after navigating to another hunk line."
         const val AGENT_NOTE = "External agent response arrived through the real Hunk daemon."
+        const val RECOVERY_REVIEW_COMMENT =
+            "Restore this reviewer comment after GoLand replaces its Hunk process."
+        const val RECOVERY_AGENT_NOTE =
+            "Keep this external agent response as local recovery history."
     }
 }
 

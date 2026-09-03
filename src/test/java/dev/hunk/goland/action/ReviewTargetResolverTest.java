@@ -95,6 +95,50 @@ class ReviewTargetResolverTest {
         assertThat(ReviewTargetResolver.actionLine(-1, 11)).isEqualTo(11);
     }
 
+    @Test
+    void ordinaryEditorInheritsTheActiveBaseToWorkingTreeReview() {
+        var active = new HunkReviewInput.RevisionToWorkingTree(BEFORE);
+
+        assertThat(ReviewTargetResolver.contextualReviewInput(
+                false,
+                HunkReviewInput.workingTree(),
+                java.util.Optional.of(active)
+        )).contains(active);
+    }
+
+    @Test
+    void diffEditorKeepsItsOwnComparisonMetadata() {
+        var inferred = new HunkReviewInput.RevisionToWorkingTree(BEFORE);
+
+        assertThat(ReviewTargetResolver.contextualReviewInput(
+                true,
+                inferred,
+                java.util.Optional.of(HunkReviewInput.workingTree())
+        )).contains(inferred);
+    }
+
+    @Test
+    void ordinaryEditorFallsBackToWorkingTreeWithoutAnActiveReview() {
+        var inferred = HunkReviewInput.workingTree();
+
+        assertThat(ReviewTargetResolver.contextualReviewInput(
+                false,
+                inferred,
+                java.util.Optional.empty()
+        )).contains(inferred);
+    }
+
+    @Test
+    void ordinaryEditorRejectsAnActiveFixedRevisionRange() {
+        var fixedRange = new HunkReviewInput.RevisionRange(BEFORE, AFTER);
+
+        assertThat(ReviewTargetResolver.contextualReviewInput(
+                false,
+                HunkReviewInput.workingTree(),
+                java.util.Optional.of(fixedRange)
+        )).isEmpty();
+    }
+
     private static ContentRevision revision(String revision) {
         return new TestContentRevision(new TestRevisionNumber(revision));
     }

@@ -31,10 +31,17 @@ For the integration decisions, failed approaches, upstream constraints, and curr
 - **Two-way refresh:** notes added by another Hunk client appear in an open thread and in gutter
   markers within the two-second refresh interval. Unchanged refreshes do not rebuild the thread,
   and changed data preserves the message-scroll position.
+- **Restart recovery:** GoLand keeps a bounded, non-roaming recovery snapshot. When an IDE-managed
+  Hunk process disappears during an IDE restart or plugin update, the next exact matching review
+  replays missing reviewer comments through Hunk's native composer and keeps missing agent responses
+  as read-only history labeled **Recovered locally**.
 - **Agent handoff:** **Copy agent prompt** puts Hunk's agent-skill prompt on the clipboard.
 - **Matching reviews:** adding a comment automatically starts `hunk diff --watch` for a working tree,
   `hunk diff <base> --watch` for GoLand's **Compare with Branch** current-version view, or
   `hunk diff <before>..<after> --watch` for a comparison between two concrete revisions.
+- **Shared current-version context:** after **Compare with Branch** starts a base-to-working-tree
+  review, opening the same file normally keeps that exact review. Comments and agent responses are
+  visible and writable from either view without launching a competing working-tree session.
 
 Reviewer comments are currently single-line anchors. Multiline Markdown bodies are supported, but a
 multi-line code selection uses its first line because Hunk's reviewer composer does not expose a
@@ -59,9 +66,20 @@ protected SSE capability is deliberately not recoverable from a stock TUI. The p
 uses bounded loopback polling every two seconds for external invalidation; requests are small and do
 not block the IDE thread.
 
-Hunk sessions and reviewer notes are process memory, not a durable session database. They survive
-unrelated mutations and daemon snapshots while the managed Hunk process is alive, and disappear
-when that TUI process exits.
+Hunk sessions and reviewer notes are process memory, not a durable session database. They disappear
+when the owning TUI exits. To bridge that lifecycle, the plugin stores up to 20 non-empty review
+snapshots for 30 days in JetBrains' project cache. The cache is local to this IDE installation,
+does not roam or modify the repository, contains comment bodies in plain text, and may be removed by
+**Invalidate Caches**.
+
+Recovery is deliberately stricter than matching `(file, line)`: it requires the same canonical
+repository, exact review input, resolved Git commits, Hunk file/hunk structure, and—for working-tree
+comparisons—the current contents of every changed file. If identity cannot be verified or the diff
+changed, GoLand does not replay anything and explains that the saved items were left stale. Replayed
+reviewer comments receive new native Hunk IDs and timestamps because upstream cannot preserve the
+originals; GoLand retains their cached display time so the conversation stays chronological. Agent
+responses cannot be recreated without falsifying provenance, so they remain clearly marked local
+history until the agent publishes them again.
 
 ## Requirements
 
@@ -92,7 +110,7 @@ This project always targets upstream `modem-dev/hunk`; no companion Hunk fork is
 
 2. In GoLand, open **Settings | Plugins**, choose the gear menu, then
    **Install Plugin from Disk…**.
-3. Select `build/distributions/hunk-goland-0.3.8.zip` and restart GoLand when prompted.
+3. Select `build/distributions/hunk-goland-0.4.0.zip` and restart GoLand when prompted.
 4. In **Settings | Tools | Hunk Session**, confirm the loopback daemon address and Hunk executable.
    Defaults are `127.0.0.1:47657` and `hunk`.
 5. On a diff-relevant line, choose **Add Hunk Comment…**. GoLand starts the matching off-screen Hunk
@@ -166,11 +184,13 @@ repository. It covers editor and diff actions, right-side-only comments, a line 
 thread, true unified-view line mapping, a submitted comment on a net-new file, Markdown,
 card/composer collapse and expansion, chronological ordering, stable message scrolling, the
 commented-file indicator, cross-file next/previous navigation, deletion, external refresh, gutter
-glyphs, missing-session recovery, and exact working-tree/revision commands. It uses Awaitility
-condition waits rather than fixed sleeps.
+glyphs, missing-session recovery, exact working-tree/revision commands, and one shared
+Compare-with-Branch session across the diff and normal source editor. It uses Awaitility condition
+waits rather than fixed sleeps.
 
 Screenshots and the reviewable HTML report are written to
-`build/reports/ux/index.html`.
+`build/reports/ux/index.html`; the focused cross-view report is
+`build/reports/ux/cross-view/index.html`.
 
 `realHunkE2e` is enabled and runs separately against an installed, unmodified upstream Hunk binary:
 
@@ -189,6 +209,13 @@ without losing the remaining notes. It also runs the real
 agent update, before deletion, and after deletion, asserting counts, provenance, bodies, and line
 targets. Machine-readable evidence, including both distinct session IDs, the CLI inspections, and
 every daemon state transition, is written to `build/reports/ux/real-daemon-e2e.json`.
+
+A second real-upstream scenario restarts the same GoLand profile after its owned TUI exits. It
+requires a new Hunk session ID, re-verifies the recovered reviewer comment as `source: "user"` in the
+new live daemon session, proves the old agent response was not republished as a reviewer note, and
+checks its read-only local attribution in the UI. Its evidence is
+`build/reports/ux/real-daemon-recovery-e2e.json`; its screenshot report is
+`build/reports/ux/recovery/index.html`.
 
 For the reported KServe comparison regression, `realProjectDiagnostic` opens the requested KServe
 worktree in an isolated GoLand profile and drives its real **Compare with Branch** UI. Despite
@@ -223,5 +250,7 @@ Verifier and uploads the HTML report, screenshots, daemon evidence, diagnostics,
 - Comments may target only lines contained in Hunk's published hunks.
 - Saved reviewer comments can be deleted but not edited because upstream Hunk has no saved-note edit
   intent.
+- Recovery is local cache assistance, not upstream session persistence: recovered reviewer comments
+  have new native IDs/timestamps, while recovered agent responses are read-only local history.
 - Push-driven SSE synchronization needs an upstream-supported way to delegate the protected review
   capability to the IDE. Until then, the two-second refresh loop is the honest stock-Hunk path.
