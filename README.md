@@ -21,7 +21,7 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   (`source: "agent"`) have distinct cards and gutter glyphs.
 - **Modern inline UI:** chronological, natural-height, collapsible Markdown cards, independently
   expandable conversation and composer areas, and inline deletion confirmation beneath the
-  reviewed line—no dialog or popup.
+  reviewed line, without a dialog or popup.
 - **Reviewer identity:** when upstream Hunk reports its default `author: "user"`, the UI presents
   the effective repository `git user.name`; explicit reviewer and agent author names stay intact.
 - **Keyboard submission:** `Ctrl+Enter` adds a comment; Enter inserts a newline.
@@ -78,8 +78,8 @@ does not roam or modify the repository, contains comment bodies in plain text, a
 **Invalidate Caches**.
 
 Recovery is deliberately stricter than matching `(file, line)`: it requires the same canonical
-repository, exact review input, resolved Git commits, Hunk file/hunk structure, and—for working-tree
-comparisons—the current contents of every changed file. If identity cannot be verified or the diff
+repository, exact review input, resolved Git commits, Hunk file/hunk structure, and the current
+contents of every changed file for working-tree comparisons. If identity cannot be verified or the diff
 changed, GoLand does not replay anything and explains that the saved items were left stale. Replayed
 reviewer comments receive new native Hunk IDs and timestamps because upstream cannot preserve the
 originals; GoLand retains their cached display time so the conversation stays chronological. Agent

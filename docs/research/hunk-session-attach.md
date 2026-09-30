@@ -10,13 +10,13 @@ The recommended implementation is a second **semantic review client**, not a PTY
 
 ## Closest upstream work
 
-- [#707 — synchronized browser reviews](https://github.com/modem-dev/hunk/pull/707): a large prototype that included shared review state and `hunk session open`; closed in favor of rebuilding it in staged changes.
-- [#729 — review wire protocol and daemon mirror](https://github.com/modem-dev/hunk/pull/729): merged semantic action vocabulary, actor identity, broker mirror, resources, and review-action application.
-- [#732 — loopback HTTP/SSE surface](https://github.com/modem-dev/hunk/pull/732): merged authenticated publication/resources/event/action endpoints, but no client or CLI entry point.
-- [#746 — read-only browser mirror](https://github.com/modem-dev/hunk/pull/746): open first client phase. Interactivity, note editing, and selection synchronization are explicitly deferred to a follow-up.
-- [#90 — TTY and tmux pane in session list](https://github.com/modem-dev/hunk/pull/90): merged terminal metadata, useful for a tmux-specific workaround but not generic attachment.
-- [#113 — persist comments and continue after quit](https://github.com/modem-dev/hunk/issues/113) and [#473 — note sidecar persistence](https://github.com/modem-dev/hunk/pull/473): adjacent persistence/resume work, not live multi-client attachment.
-- [#770 — replace browser WebSocket assertion](https://github.com/modem-dev/hunk/issues/770): adjacent browser transport cleanup, not session attachment.
+- [#707: synchronized browser reviews](https://github.com/modem-dev/hunk/pull/707): a large prototype that included shared review state and `hunk session open`; closed in favor of rebuilding it in staged changes.
+- [#729: review wire protocol and daemon mirror](https://github.com/modem-dev/hunk/pull/729): merged semantic action vocabulary, actor identity, broker mirror, resources, and review-action application.
+- [#732: loopback HTTP/SSE surface](https://github.com/modem-dev/hunk/pull/732): merged authenticated publication/resources/event/action endpoints, but no client or CLI entry point.
+- [#746: read-only browser mirror](https://github.com/modem-dev/hunk/pull/746): open first client phase. Interactivity, note editing, and selection synchronization are explicitly deferred to a follow-up.
+- [#90: TTY and tmux pane in session list](https://github.com/modem-dev/hunk/pull/90): merged terminal metadata, useful for a tmux-specific workaround but not generic attachment.
+- [#113: persist comments and continue after quit](https://github.com/modem-dev/hunk/issues/113) and [#473: note sidecar persistence](https://github.com/modem-dev/hunk/pull/473): adjacent persistence/resume work, not live multi-client attachment.
+- [#770: replace browser WebSocket assertion](https://github.com/modem-dev/hunk/issues/770): adjacent browser transport cleanup, not session attachment.
 
 The installed `hunk session --help` exposes `list`, `get`, `context`, `review`, `navigate`, `reload`, `comment`, and `highlight`; it has no attach/join/open operation.
 

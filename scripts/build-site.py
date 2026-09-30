@@ -67,7 +67,7 @@ def build(since, output):
     version, ide = versions()
     report = ROOT / "build/reports/ux"
     captures = select_captures(report, json.loads((ROOT / "docs/screenshots.json").read_text()), since)
-    guide = (ROOT / "docs/user-guide.md").read_text().replace("../README.md#how-to-install", "#install-and-configure-the-plugin")
+    guide = (ROOT / "docs/user-guide.md").read_text()
     # The guide is tracked Markdown; rendering does not ingest logs, request bodies, or raw report HTML.
     content = subprocess.run(["pandoc", "--from=gfm", "--to=html5"], input=guide,
                              text=True, capture_output=True, check=True).stdout
@@ -88,9 +88,9 @@ def build(since, output):
         f'alt="{escape(card["title"])}"></a></article>' for card in captures)
     html = f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hunk Session — user guide</title><link rel="stylesheet" href="assets/site.css"></head>
+<title>Hunk Session: user guide</title><link rel="stylesheet" href="assets/site.css"></head>
 <body><header><p class="eyebrow">Hunk Session for GoLand</p><h1>Review together, inside your editor.</h1>
-<p>Setup, comments, agent responses, and navigation — illustrated by real GoLand tests.</p>
+<p>Setup, comments, agent responses, and navigation, illustrated by real GoLand tests.</p>
 <p class="evidence">Plugin {escape(version)} · GoLand {escape(ide)} · fixture tests passed ·
 commit <code>{escape(commit[:12])}</code> · <a href="manifest.json">capture manifest</a></p>
 <nav><a href="#guide">User guide</a><a href="#features">Features in GoLand</a></nav></header>

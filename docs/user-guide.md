@@ -37,8 +37,9 @@ terminal.
 
 ## Install and configure the plugin
 
-1. Obtain the plugin ZIP. The current local development bundle is
-   `build/distributions/hunk-goland-0.1.0.zip`; see the [README](../README.md#how-to-install) to build it.
+1. Obtain `hunk-goland-0.1.0.zip` from the project's release assets, or
+   [build it from source](#build-from-source). The local build produces
+   `build/distributions/hunk-goland-0.1.0.zip`.
 2. In GoLand, open **Settings | Plugins**, then the gear menu and **Install Plugin from Disk…**.
 3. Select the ZIP and accept the IDE's reload/restart prompt.
 4. Open **Settings | Tools | Hunk Session**:
@@ -116,6 +117,24 @@ After a matching restart, missing reviewer comments are submitted into a fresh H
 receive new IDs and timestamps. Missing agent responses remain read-only **Recovered locally**
 history in GoLand; they are not published as new reviewer comments. If an agent changes the diff,
 an old anchor may no longer belong to the current review.
+
+## Build from source
+
+With JDK 25 and Git available, run from a checkout of this project:
+
+```bash
+./gradlew clean buildPlugin
+```
+
+The Gradle wrapper downloads the pinned build tools and GoLand platform. To reuse an installed
+GoLand instead, point Gradle at its bundled runtime and installation:
+
+```bash
+JAVA_HOME=/path/to/GoLand/jbr \
+  ./gradlew -PplatformPath=/path/to/GoLand clean buildPlugin
+```
+
+Install the resulting ZIP as described above. Building the plugin does not install Hunk.
 
 ## Troubleshooting
 
