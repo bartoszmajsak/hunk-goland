@@ -4,8 +4,8 @@ Review a live Hunk changeset without leaving GoLand. The plugin shows Hunk revie
 responses on code lines, and lets you add genuine Hunk reviewer comments from normal editors and
 diff viewers.
 
-For the integration decisions, failed approaches, upstream constraints, and current evidence, see
-[JOURNEY.md](JOURNEY.md).
+For the upstream integration contract and research, see
+[the upstream audit](docs/upstream-no-change-e2e.md) and [contributor instructions](AGENTS.md).
 
 Start with the [user guide](docs/user-guide.md) for Hunk installation, plugin setup, reviewing,
 agent handoff, and troubleshooting. Hunk is a required external dependency, not bundled in the ZIP.
@@ -248,8 +248,14 @@ hierarchies, diff `DataContext`, daemon sessions, Hunk PIDs/arguments/working di
 isolated `idea.log`. Lifecycle and opt-in diagnostic log events use stable `event=…` names and never
 include comment bodies or tokens.
 
-GitHub Actions uses Xvfb to run both the visual fixture and real-upstream tasks, then runs Plugin
-Verifier and uploads the HTML report, screenshots, daemon evidence, diagnostics, and installable ZIP.
+GitHub Actions uses Xvfb to run both the visual fixture and real-upstream tasks, runs Plugin
+Verifier, and uploads the HTML report, screenshots, daemon evidence, diagnostics, and installable ZIP.
+The verified guide and selected fixture screenshots form the living documentation site. Successful
+default-branch runs deploy it to GitHub Pages; pull requests retain a preview artifact.
+
+Tags matching `v*` run the same verification pipeline and create a draft GitHub release with the
+exact verified bundle, checksums, and build metadata. See [release operations](docs/releasing.md)
+for repository setup, local checks, and first-release prerequisites.
 
 ## Current constraints
 

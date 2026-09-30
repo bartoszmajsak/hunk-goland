@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hunk_version=0.20.0
+hunk_sha256=3c1a36767a77675133a25ea7a7fded4c11788ce923407f6bf3608f20c06cf0bb
+extract_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/hunk-ci.XXXXXX")"
+archive="$extract_dir/hunkdiff-linux-x64.tar.gz"
+curl --proto '=https' --proto-redir '=https' --fail --silent --show-error \
+  --location --retry 3 --output "$archive" \
+  "https://github.com/modem-dev/hunk/releases/download/v$hunk_version/hunkdiff-linux-x64.tar.gz"
+printf '%s  %s\n' "$hunk_sha256" "$archive" | sha256sum --check --strict
+tar -xzf "$archive" -C "$extract_dir"
+payload="$extract_dir/hunkdiff-linux-x64"
+test -f "$payload/hunk"
+test -d "$payload/skills"
+install_root="${HUNK_CI_INSTALL_DIR:-$HOME/.hunk}"
+mkdir -p "$install_root/bin"
+install -m 0755 "$payload/hunk" "$install_root/bin/hunk"
+cp -R "$payload/skills" "$install_root/skills"
+if [[ -f "$payload/metadata.json" ]]; then
+  install -m 0644 "$payload/metadata.json" "$install_root/metadata.json"
+fi
+test "$("$install_root/bin/hunk" --version)" = "$hunk_version"
+echo "Installed checksum-pinned Hunk $hunk_version"

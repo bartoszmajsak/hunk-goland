@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>dev.hunk.session</id>
     <name>Hunk Session</name>
-    <vendor url="https://hunk.dev">Hunk</vendor>
+    <vendor>Bartosz Majsak</vendor>
 
     <description><![CDATA[
         Adds reviewer comments to a live Hunk session from GoLand's code editor

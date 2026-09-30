@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.gradle.api.tasks.testing.Test
 
 plugins {
@@ -32,6 +33,7 @@ dependencies {
     implementation("org.commonmark:commonmark:0.30.0")
 
     intellijPlatform {
+        pluginVerifier("1.410")
         if (localIde.isPresent) {
             local(localIde)
         } else {
@@ -181,7 +183,22 @@ intellijPlatformTesting.testIdeUi.register("realProjectDiagnostic") {
     }
 }
 
+// Starter's remote Driver uses the same default port across isolated IDE profiles.
+// Gradle can otherwise schedule independent Test tasks together in a combined invocation.
+tasks.named("realHunkE2e") {
+    mustRunAfter("integrationTest")
+}
+tasks.named("realProjectDiagnostic") {
+    mustRunAfter("integrationTest", "realHunkE2e")
+}
+
 intellijPlatform {
+    pluginVerification {
+        ides {
+            create(IntelliJPlatformType.GoLand, platformVersion.get())
+            create(IntelliJPlatformType.GoLand, providers.gradleProperty("verificationPlatformVersion").get())
+        }
+    }
     pluginConfiguration {
         name = "Hunk Session"
         version = project.version.toString()
@@ -189,8 +206,7 @@ intellijPlatform {
             sinceBuild = "262"
         }
         vendor {
-            name = "Hunk"
-            url = "https://hunk.dev"
+            name = "Bartosz Majsak"
         }
     }
 }

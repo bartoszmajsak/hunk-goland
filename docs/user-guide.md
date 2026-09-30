@@ -7,7 +7,7 @@ ZIP does not contain the Hunk executable.
 ## Before you start
 
 - GoLand 2026.2 or later within the verified compatibility range. The development build has been
-  verified against GoLand builds `262.10315.160` and `263.3889.70`.
+  verified against GoLand builds `262.9437.286` and `263.5701.47`.
 - Upstream [Hunk](https://github.com/modem-dev/hunk). This plugin's native review integration has
   been tested against **Hunk 0.20.0**. Compatibility with later versions is not guaranteed.
 - Git and a local Git-backed project containing changes or a branch/revision comparison to review.

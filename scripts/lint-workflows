@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+else
+  lint_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/hunk-actionlint.XXXXXX")"
+  archive="$lint_dir/actionlint.tar.gz"
+  curl --proto '=https' --proto-redir '=https' --fail --silent --show-error \
+    --location --retry 3 --output "$archive" \
+    https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+  printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$archive" \
+    | sha256sum --check --strict
+  tar -xzf "$archive" -C "$lint_dir" actionlint
+  "$lint_dir/actionlint"
+fi
+python3 scripts/ci.py check-pins
