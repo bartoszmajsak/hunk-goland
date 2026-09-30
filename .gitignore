@@ -5,3 +5,5 @@
 allure-results/
 build/
 out/
+JOURNEY.md
+__pycache__/
