@@ -63,8 +63,13 @@ coverage.
   repository `git user.name` when accessible, retain explicit reviewer/agent names, and never change
   the stored author or `source: "user"` provenance to achieve the display label.
 - Preserve distinct reviewer/agent glyphs, native VCS tree file badges, status counts, and
-  previous/next thread navigation. Display shortcuts from the active JetBrains keymap rather than
-  hard-coding labels.
+  previous/next thread navigation. Keep the persistent **Hunk Review** tool window, status widget,
+  file badges, gutter summaries, and navigation actions backed by the same immutable
+  `HunkReviewIndex`; do not create a second comment cache or ordering model. Display shortcuts from
+  the active JetBrains keymap rather than hard-coding labels.
+- Rebuild navigator trees from stable file/thread nodes and expand file nodes by `TreePath`, not
+  mutable row numbers. Row indices change as parents expand, and duplicate line labels are valid
+  across files.
 - Overwriting a built ZIP does not hot-reload an installed GoLand plugin. For manual verification,
   reinstall the ZIP and accept the IDE reload/restart prompt.
 

@@ -341,10 +341,7 @@ final class HunkLineInlay implements Disposable {
             return;
         }
         if (index.threads().size() == 1
-                && destination.equals(new HunkReviewIndex.ThreadLocation(
-                        target.filePath(),
-                        target.line()
-                ))) {
+                && destination.matches(target.filePath(), target.line())) {
             showStatus("This is the only Hunk comment thread in the review.");
             return;
         }

@@ -39,11 +39,28 @@ record HunkReviewIndex(
 
     private static CommentedFile commentedFile(String filePath, List<HunkReviewNote> notes) {
         var threads = notes.stream()
-                .map(note -> new ThreadLocation(filePath, note.note().line()))
-                .distinct()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        note -> note.note().line(),
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.mapping(
+                                HunkReviewNote::note,
+                                java.util.stream.Collectors.toList()
+                        )
+                ))
+                .entrySet().stream()
+                .map(entry -> thread(filePath, entry.getKey(), entry.getValue()))
                 .sorted(Comparator.comparingInt(ThreadLocation::line))
                 .toList();
         return new CommentedFile(filePath, threads, notes.size());
+    }
+
+    private static ThreadLocation thread(
+            String filePath,
+            int line,
+            List<dev.hunk.goland.model.HunkSessionNote> notes
+    ) {
+        var summary = HunkGutterSummary.from(notes);
+        return new ThreadLocation(filePath, line, summary.reviewCount(), summary.agentCount());
     }
 
     List<ThreadLocation> threads() {
@@ -55,8 +72,11 @@ record HunkReviewIndex(
         if (threads.isEmpty()) {
             return null;
         }
-        var exact = new ThreadLocation(current.filePath(), current.line());
-        var currentIndex = threads.indexOf(exact);
+        var exact = new ThreadLocation(current.filePath(), current.line(), 0, 0);
+        var currentIndex = java.util.stream.IntStream.range(0, threads.size())
+                .filter(index -> threads.get(index).matches(current.filePath(), current.line()))
+                .findFirst()
+                .orElse(-1);
         if (currentIndex >= 0) {
             return threads.get(Math.floorMod(currentIndex + direction.step(), threads.size()));
         }
@@ -108,7 +128,25 @@ record HunkReviewIndex(
         }
     }
 
-    record ThreadLocation(String filePath, int line) {
+    record ThreadLocation(String filePath, int line, int reviewCount, int agentCount) {
+        ThreadLocation {
+            if (reviewCount < 0 || agentCount < 0) {
+                throw new IllegalArgumentException("thread counts cannot be negative");
+            }
+        }
+
+        boolean matches(String candidateFilePath, int candidateLine) {
+            return filePath.equals(candidateFilePath) && line == candidateLine;
+        }
+
+        int itemCount() {
+            return reviewCount + agentCount;
+        }
+
+        HunkGutterSummary.Kind kind() {
+            return new HunkGutterSummary(reviewCount, agentCount).kind();
+        }
+
         String displayName() {
             return filePath + ":" + line;
         }

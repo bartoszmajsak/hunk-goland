@@ -142,20 +142,34 @@ class HunkReviewCommentUiTest {
                     )
 
                     ui.closeThread(editor)
-                    ui.openCommentedFilesIndicator("Hunk: 2 files · 4")
-                    ux.capture(
-                        frame,
-                        "02-commented-files",
-                        "Commented-file indicator",
-                        "The status bar summarizes the active review and opens a compact list with per-file thread and item counts.",
+                    val navigator = ui.openReviewNavigator(
+                        expectedStatus = "Hunk: 2 files · 4",
+                        expectedSummary = "2 files · 2 threads · 4 items",
                     )
-                    ui.closeCommentedFilesIndicator()
-                    ui.navigateToNextThread(editor)
                     ux.capture(
                         frame,
-                        "02-file-navigation",
-                        "Jump between commented files",
-                        "The next-thread action opens the following right-side review thread across files; each commented line remains one navigation stop regardless of message count.",
+                        "02-review-navigator",
+                        "Review-wide comment navigator",
+                        "A persistent Hunk Review pane groups comment threads by file and line, shows reviewer/agent glyphs and item counts, and keeps navigation at hand in its toolbar.",
+                    )
+                    ui.openThreadFromReviewNavigator(
+                        navigator,
+                        TestGoProject.MAIN_FILE,
+                        TestGoProject.CHANGED_LINE,
+                    )
+                    ux.capture(
+                        frame,
+                        "02-pane-navigation",
+                        "Open a thread from the review pane",
+                        "Selecting a line entry and choosing Open Thread opens its inline conversation while the review index remains available at the side.",
+                    )
+                    val mainEditor = frame.codeEditorForFile("main.go")
+                    ui.navigateToNextThread(mainEditor)
+                    ux.capture(
+                        frame,
+                        "02-shortcut-navigation",
+                        "Previous and next thread shortcuts",
+                        "The existing review-order shortcuts remain available for a fast sequential pass across files and wrap at either end.",
                     )
                     val addedEditor = frame.codeEditorForFile("added.go")
                     ui.navigateToPreviousThread(addedEditor)

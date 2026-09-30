@@ -398,21 +398,54 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         cast(pane.component, SwingScrollPaneRef::class).getVerticalScrollBar().getValue()
     }
 
-    fun openCommentedFilesIndicator(expectedText: String) {
+    fun openReviewNavigator(
+        expectedStatus: String,
+        expectedSummary: String,
+    ): JTreeUiComponent {
         awaitValue("Hunk commented-file status indicator") {
-            frame.x { byVisibleText(expectedText) }
+            frame.x { byVisibleText(expectedStatus) }
                 .takeIf { it.present() && it.component.isShowing() }
         }
         frame.driver.invokeAction(SHOW_COMMENTED_FILES_ACTION_ID, now = false)
-        awaitCondition("Hunk commented files popup") {
-            visiblePopupList() != null
+        val tree = awaitValue("Hunk review navigator") {
+            frame.xx(JTreeUiComponent::class.java) {
+                byAccessibleName("Hunk review threads")
+            }.list().firstOrNull { it.component.isShowing() }
         }
+        awaitCondition("Hunk review navigator summary") {
+            frame.x { byVisibleText(expectedSummary) }
+                .let { it.present() && it.component.isShowing() }
+        }
+        return tree
     }
 
-    fun closeCommentedFilesIndicator() {
-        awaitValue("commented files popup list") { visiblePopupList() }
-        frame.driver.invokeAction(SHOW_COMMENTED_FILES_ACTION_ID, now = false)
-        awaitCondition("commented files popup closed") { visiblePopupList() == null }
+    fun openThreadFromReviewNavigator(
+        tree: JTreeUiComponent,
+        filePath: String,
+        line: Int,
+    ) {
+        val row = awaitValue("Hunk navigator row for $filePath:$line") {
+            tree.collectExpandedPaths()
+                .firstOrNull { path ->
+                    path.path.any { it.startsWith(filePath) } &&
+                        path.path.lastOrNull()?.startsWith("Line $line") == true
+                }
+                ?.row
+        }
+        tree.clickRow(row)
+        awaitCondition("Hunk navigator row selected") {
+            val selected = tree.collectSelectedPaths()
+                .singleOrNull()
+                ?.path
+                .orEmpty()
+            selected.any { it.startsWith(filePath) } &&
+                selected.lastOrNull()?.startsWith("Line $line") == true
+        }
+        clickActionButton("Open Thread")
+        awaitCondition("inline thread opened from Hunk navigator") {
+            frame.x { byVisibleText("$filePath:$line (new)") }
+                .let { it.present() && it.component.isShowing() }
+        }
     }
 
     fun navigateToNextThread(editor: JEditorUiComponent) {
@@ -638,11 +671,6 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         frame.xx(JEditorUiComponent::class.java) { byClass("EditorComponentImpl") }
             .list()
             .filter { it.component.isShowing() && it.isInsideDiffViewer() }
-
-    private fun visiblePopupList(): UiComponent? =
-        frame.xx { byType("javax.swing.JList") }
-            .list()
-            .firstOrNull { it.component.isShowing() }
 
     private companion object {
         const val ACTION_ID = "dev.hunk.goland.AddComment"

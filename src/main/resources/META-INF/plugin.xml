@@ -24,6 +24,12 @@
         <statusBarWidgetFactory
                 id="HunkReviewComments"
                 implementation="dev.hunk.goland.action.HunkReviewStatusBarWidgetFactory"/>
+        <toolWindow
+                id="Hunk Review"
+                anchor="right"
+                secondary="true"
+                icon="/icons/hunkMixedThread.svg"
+                factoryClass="dev.hunk.goland.action.HunkReviewToolWindowFactory"/>
         <openapi.vcs.changes.ui.filePathIconProvider
                 implementation="dev.hunk.goland.action.HunkFilePathIconProvider"
                 order="first"/>
@@ -51,8 +57,8 @@
         </action>
         <action id="dev.hunk.goland.ShowCommentedFiles"
                 class="dev.hunk.goland.action.ShowHunkCommentedFilesAction"
-                text="Show Hunk Commented Files"
-                description="List files with right-side Hunk comment threads"
+                text="Show Hunk Review"
+                description="Open the review-wide Hunk comment navigator"
                 icon="/icons/hunkMixedThread.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>

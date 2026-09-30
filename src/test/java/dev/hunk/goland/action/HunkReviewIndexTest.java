@@ -19,7 +19,7 @@ class HunkReviewIndexTest {
     void groupsItemsIntoSortedFileAndLineThreads() {
         var context = target("cmd/main.go", 4);
         var index = HunkReviewIndex.from(context, List.of(
-                note("cmd/main.go", "agent", 4, ReviewSide.NEW),
+                note("cmd/main.go", "agent", 4, ReviewSide.NEW, HunkNoteSource.AGENT),
                 note("cmd/added.go", "review", 5, ReviewSide.NEW),
                 note("cmd/main.go", "review", 4, ReviewSide.NEW),
                 note("cmd/main.go", "later", 9, ReviewSide.NEW),
@@ -30,6 +30,11 @@ class HunkReviewIndexTest {
                 .containsExactly("cmd/main.go", "cmd/added.go");
         assertThat(index.itemCount()).isEqualTo(4);
         assertThat(index.files().getFirst().threadCount()).isEqualTo(2);
+        assertThat(index.threads().getFirst().itemCount()).isEqualTo(2);
+        assertThat(index.threads().getFirst().kind()).isEqualTo(HunkGutterSummary.Kind.MIXED);
+        assertThat(index.threads().get(1).kind()).isEqualTo(HunkGutterSummary.Kind.REVIEW);
+        assertThat(index.threads().get(2).kind()).isEqualTo(HunkGutterSummary.Kind.REVIEW);
+
         assertThat(index.threads()).extracting(HunkReviewIndex.ThreadLocation::displayName)
                 .containsExactly("cmd/main.go:4", "cmd/main.go:9", "cmd/added.go:5");
     }
@@ -89,9 +94,19 @@ class HunkReviewIndexTest {
     }
 
     private static HunkReviewNote note(String filePath, String id, int line, ReviewSide side) {
+        return note(filePath, id, line, side, HunkNoteSource.USER);
+    }
+
+    private static HunkReviewNote note(
+            String filePath,
+            String id,
+            int line,
+            ReviewSide side,
+            HunkNoteSource source
+    ) {
         return new HunkReviewNote(filePath, new HunkSessionNote(
                 id,
-                HunkNoteSource.USER,
+                source,
                 id,
                 "reviewer",
                 null,
