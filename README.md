@@ -7,6 +7,9 @@ diff viewers.
 For the integration decisions, failed approaches, upstream constraints, and current evidence, see
 [JOURNEY.md](JOURNEY.md).
 
+Start with the [user guide](docs/user-guide.md) for Hunk installation, plugin setup, reviewing,
+agent handoff, and troubleshooting. Hunk is a required external dependency, not bundled in the ZIP.
+
 ## What works
 
 - **Normal editors:** open a line-attached thread from **Add Hunk Comment…**.
@@ -22,10 +25,12 @@ For the integration decisions, failed approaches, upstream constraints, and curr
 - **Reviewer identity:** when upstream Hunk reports its default `author: "user"`, the UI presents
   the effective repository `git user.name`; explicit reviewer and agent author names stay intact.
 - **Keyboard submission:** `Ctrl+Enter` adds a comment; Enter inserts a newline.
-- **Review navigation:** commented files carry a blue Hunk badge in native VCS change trees, and the
-  status bar shows the number of commented files and notes. Each thread has clickable
-  previous/next controls labeled with the active keymap shortcuts; the defaults are `Ctrl+Alt+,`
-  and `Ctrl+Alt+.` and navigation wraps across files.
+- **Review navigation:** the persistent **Hunk Review** tool window groups every current/right-side
+  thread by file and line, shows reviewer/agent glyphs and counts, and opens a selected thread with
+  double-click, Enter, or **Open Thread**. Click the Hunk status-bar count or use
+  **Tools | Show Hunk Review** to reveal it. Commented files also carry a blue Hunk badge in native
+  VCS change trees. Thread and pane controls navigate previous/next in review order, display the
+  active keymap shortcuts (defaults: `Ctrl+Alt+,` and `Ctrl+Alt+.`), and wrap across files.
 - **Native deletion:** editable reviewer notes are removed through Hunk's `comment-rm` action. Hunk
   does not currently expose editing for a saved reviewer note.
 - **Two-way refresh:** notes added by another Hunk client appear in an open thread and in gutter
@@ -84,8 +89,10 @@ history until the agent publishes them again.
 ## Requirements
 
 - GoLand 2026.2 (`262.*`).
-- Upstream Hunk 0.20.0 or newer, available as `hunk` on `PATH` or configured explicitly.
-- JDK 25 for building; GoLand's bundled `jbr` is suitable.
+- Upstream Hunk, installed separately and available as `hunk` on `PATH` or configured explicitly.
+  The tested upstream version is **0.20.0**; newer versions require compatibility verification.
+- Git available to GoLand, and a Git-backed project with changes to review.
+- JDK 25 only when building from source; installing the plugin ZIP does not require a separate JDK.
 
 Install upstream Hunk using one of its documented methods, for example:
 
@@ -110,7 +117,7 @@ This project always targets upstream `modem-dev/hunk`; no companion Hunk fork is
 
 2. In GoLand, open **Settings | Plugins**, choose the gear menu, then
    **Install Plugin from Disk…**.
-3. Select `build/distributions/hunk-goland-0.4.0.zip` and restart GoLand when prompted.
+3. Select `build/distributions/hunk-goland-0.5.0.zip` and restart GoLand when prompted.
 4. In **Settings | Tools | Hunk Session**, confirm the loopback daemon address and Hunk executable.
    Defaults are `127.0.0.1:47657` and `hunk`.
 5. On a diff-relevant line, choose **Add Hunk Comment…**. GoLand starts the matching off-screen Hunk
@@ -183,8 +190,9 @@ The same JetBrains Driver tests support three display adapters:
 repository. It covers editor and diff actions, right-side-only comments, a line without an existing
 thread, true unified-view line mapping, a submitted comment on a net-new file, Markdown,
 card/composer collapse and expansion, chronological ordering, stable message scrolling, the
-commented-file indicator, cross-file next/previous navigation, deletion, external refresh, gutter
-glyphs, missing-session recovery, exact working-tree/revision commands, and one shared
+persistent review navigator, file indicators, cross-file next/previous navigation, deletion,
+external refresh, gutter glyphs, missing-session recovery, exact working-tree/revision commands,
+and one shared
 Compare-with-Branch session across the diff and normal source editor. It uses Awaitility condition
 waits rather than fixed sleeps.
 
