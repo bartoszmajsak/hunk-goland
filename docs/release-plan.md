@@ -1,14 +1,13 @@
 # First public release plan
 
-The current development bundle is `0.5.0`. No Git tags or Git remote are configured in this checkout.
-The first public release can be named `v0.1.0` without reverting functionality or rewriting the
-existing commits. Change the plugin's embedded version, bundle filename, and installation docs
-together in a dedicated release-preparation commit. People using the development `0.5.0` build
-will need to install the public bundle explicitly; do not rely on automatic upgrade ordering.
+The current bundle is `0.1.0`, the intended first public release version. Earlier version numbers
+were used only for local testing; no plugin release has been published. Renumbering preserves all
+current functionality and the existing commits. Historical test evidence keeps the version numbers
+it actually tested. No Git tags or Git remote are configured in this checkout yet.
 
 ## 1. Preserve clean feature commits
 
-Commit the tested review navigator separately from the user guide and release planning. Keep the
+The tested review navigator and user guide are committed separately. Keep the
 existing feature, test, CI, and integration-history commits. Review the final public diff, remove
 obsolete instructions, and record user-facing changes in a changelog.
 

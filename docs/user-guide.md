@@ -38,7 +38,7 @@ terminal.
 ## Install and configure the plugin
 
 1. Obtain the plugin ZIP. The current local development bundle is
-   `build/distributions/hunk-goland-0.5.0.zip`; see the [README](../README.md#how-to-install) to build it.
+   `build/distributions/hunk-goland-0.1.0.zip`; see the [README](../README.md#how-to-install) to build it.
 2. In GoLand, open **Settings | Plugins**, then the gear menu and **Install Plugin from Disk…**.
 3. Select the ZIP and accept the IDE's reload/restart prompt.
 4. Open **Settings | Tools | Hunk Session**:

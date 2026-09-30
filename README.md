@@ -117,7 +117,7 @@ This project always targets upstream `modem-dev/hunk`; no companion Hunk fork is
 
 2. In GoLand, open **Settings | Plugins**, choose the gear menu, then
    **Install Plugin from Disk…**.
-3. Select `build/distributions/hunk-goland-0.5.0.zip` and restart GoLand when prompted.
+3. Select `build/distributions/hunk-goland-0.1.0.zip` and restart GoLand when prompted.
 4. In **Settings | Tools | Hunk Session**, confirm the loopback daemon address and Hunk executable.
    Defaults are `127.0.0.1:47657` and `hunk`.
 5. On a diff-relevant line, choose **Add Hunk Comment…**. GoLand starts the matching off-screen Hunk
