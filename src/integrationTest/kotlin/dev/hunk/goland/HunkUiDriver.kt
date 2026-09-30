@@ -216,7 +216,8 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         frame.xx(JTreeUiComponent::class.java) { byClass("AsyncChangesBrowserTreeList") }
             .list()
             .firstOrNull { tree ->
-                tree.collectExpandedPathsAsStrings().any { path -> path.endsWith(fileName) }
+                tree.component.isShowing() &&
+                    tree.collectExpandedPathsAsStrings().any { path -> path.endsWith(fileName) }
             }
     }
 
@@ -642,7 +643,7 @@ internal class HunkUiDriver(private val frame: UiComponent) {
     fun clickActionButton(accessibleName: String, label: String = accessibleName) {
         val action = awaitValue(label) {
             frame.button { byAccessibleName(accessibleName) }
-                .takeIf { it.present() && it.component.isShowing() }
+                .takeIf { it.present() && it.component.isShowing() && it.component.isEnabled() }
         }
         frame.driver.withContext(OnDispatcher.EDT, LockSemantics.NO_LOCK) {
             cast(action.component, IdeActionButtonRef::class).click()

@@ -387,6 +387,7 @@ class HunkReviewCommentUiTest {
                             path.path.lastOrNull()?.contains("added.go") == true
                         }
                     }
+                    changes.setFocus()
                     ui.clickActionButton("Show Diff")
                     ui.waitForDiffEditorContaining("func greeting")
                     ui.selectUnifiedDiffViewer()
@@ -516,6 +517,7 @@ class HunkReviewCommentUiTest {
                         path.path.lastOrNull()?.contains("added.go") == true
                     }
                 }
+                changes.setFocus()
                 ui.clickActionButton("Show Diff")
                 ui.selectUnifiedDiffViewer()
                 val editor = ui.waitForDiffEditorContaining("func greeting")
