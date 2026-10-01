@@ -435,6 +435,26 @@ class HunkReviewCommentUiTest {
                         "The matching revision review is running, a comment submitted from the net-new file is persisted against cmd/added.go line 4, and its native Changes-tree file icon carries a Hunk review badge.",
                     )
 
+                    ui.closeThread(branchEditor)
+                    frame.driver.invokeAction("HideAllWindows", now = false)
+                    awaitCondition("unobstructed range-review editor") {
+                        frame.xx { byAccessibleName("Hunk review threads") }
+                            .list().none { it.component.isShowing() }
+                    }
+                    ui.selectLines(branchEditor, 3, 4)
+                    ui.openThreadWithAutomaticManagedReview(branchEditor)
+                    ui.submitCommentWithButton(RANGE_COMMENT)
+                    val rangeRequest = daemon.takeReviewAction("selected lines in added-file diff")
+                    HunkReviewActionAssert.assertThat(rangeRequest)
+                        .targetsFile(TestGoProject.ADDED_FILE)
+                        .addsRangeComment(3, 4, RANGE_COMMENT)
+                    ui.waitForSubmission(3, filePath = TestGoProject.ADDED_FILE, endLine = 4)
+                    awaitCondition("inclusive range metadata") {
+                        frame.x { byVisibleText("${TestGoProject.ADDED_FILE}:3-4 (new)") }.present()
+                    }
+                    ux.capture(frame, "16-range-comment", "Reviewing a selected code range",
+                        "Selecting lines 3-4 in an added-file diff preserves both endpoints. The thread and card identify the inclusive range; the next line's exclusive selection boundary is not included.")
+
                 }
                 val ideaLog = readIdeaLog(context.paths.testHome)
                 assertThat(ideaLog)
@@ -452,6 +472,7 @@ class HunkReviewCommentUiTest {
                         RIGHT_SIDE_COMMENT,
                         UNIFIED_COMMENT,
                         ADDED_FILE_COMMENT,
+                        RANGE_COMMENT,
                         FakeHunkDaemon.EXTERNAL_RESPONSE,
                     )
             }
@@ -604,6 +625,7 @@ class HunkReviewCommentUiTest {
         const val RIGHT_SIDE_COMMENT = "Please verify the new-side behavior here."
         const val UNIFIED_COMMENT = "Keep this unified-view line mapping exact."
         const val ADDED_FILE_COMMENT = "Please review this newly added greeting."
+        const val RANGE_COMMENT = "Please review this entire greeting implementation."
         const val BRANCH_DIFF_COMMENT = "This comment starts in Compare with Branch."
         const val SOURCE_EDITOR_COMMENT = "This source view shares the branch review."
         const val CLEAN_LINE_COMMENT = "First comment on this line.\n\n- Markdown stays multiline."
@@ -638,6 +660,7 @@ class HunkReviewCommentUiTest {
                     |old = termios.tcgetattr(0)
                     |tty.setraw(0)
                     |draft = None
+                    |selection = None
                     |try:
                     |    while True:
                     |        value = os.read(0, 1)
@@ -648,7 +671,16 @@ class HunkReviewCommentUiTest {
                     |                break
                     |            if value == b"c":
                     |                draft = bytearray()
-                    |                os.write(1, b"Draft note\n")
+                    |                label = "Draft note"
+                    |                if selection:
+                    |                    label += f" - {selection['filePath']} R{selection['line']}–R{selection['endLine']}"
+                    |                os.write(1, (label + "\n").encode("utf-8"))
+                    |            if value == b"v":
+                    |                selection = post({"action": "test-selection"})
+                    |                os.write(1, b"Selection\n")
+                    |            if value == b"j" and selection:
+                    |                selection["endLine"] += 1
+                    |                os.write(1, b"Selection moved\n")
                     |        elif value == b"\x13":
                     |            body = bytes(draft)
                     |            body = body.replace(b"\x1b[200~", b"").replace(b"\x1b[201~", b"")
@@ -656,9 +688,11 @@ class HunkReviewCommentUiTest {
                     |                "action": "test-add-user",
                     |                "body": body.decode("utf-8"),
                     |                "author": "GoLand reviewer",
+                    |                "endLine": selection["endLine"] if selection else None,
                     |            })
                     |            os.write(1, b"Your note\n")
                     |            draft = None
+                    |            selection = None
                     |        else:
                     |            draft.extend(value)
                     |            os.write(1, value)

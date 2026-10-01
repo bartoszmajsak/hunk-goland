@@ -158,7 +158,9 @@ public final class ReviewTargetResolver {
         var absoluteFile = Path.of(filePath != null ? filePath.getPath() : virtualFile.getPath());
         var editorLine = focusedLine(event.getDataContext(), editor);
         var reviewLine = reviewLine(event.getDataContext(), editor, side, editorLine);
-        if (reviewLine.isEmpty()) {
+        var reviewEnd = reviewLine(event.getDataContext(), editor, side,
+                selectionEndLine(event.getDataContext(), editor, editorLine));
+        if (reviewLine.isEmpty() || reviewEnd.isEmpty()) {
             return unavailable("Choose a line that exists on the current/right side of this diff.");
         }
         try {
@@ -167,6 +169,7 @@ public final class ReviewTargetResolver {
                     PathMapping.repositoryRelative(rootPath, absoluteFile),
                     side,
                     reviewLine.getAsInt(),
+                    reviewEnd.getAsInt(),
                     reviewInput
             );
             return new TargetResolution.Resolved(target, editor, editorLine);
@@ -222,7 +225,8 @@ public final class ReviewTargetResolver {
 
         var editorLine = focusedLine(editor);
         var reviewLine = reviewLine(context, editor, side, editorLine);
-        if (reviewLine.isEmpty()) {
+        var reviewEnd = reviewLine(context, editor, side, selectionEndLine(context, editor, editorLine));
+        if (reviewLine.isEmpty() || reviewEnd.isEmpty()) {
             return unavailable("Choose a line that exists on the current/right side of this diff.");
         }
         try {
@@ -232,6 +236,7 @@ public final class ReviewTargetResolver {
                     PathMapping.repositoryRelative(rootPath, absoluteFile),
                     side,
                     reviewLine.getAsInt(),
+                    reviewEnd.getAsInt(),
                     reviewInput
             ), editor, editorLine);
         } catch (IllegalArgumentException error) {
@@ -706,6 +711,18 @@ public final class ReviewTargetResolver {
                 : editor.getCaretModel().getOffset();
         var document = editor.getDocument();
         return document.getLineNumber(Math.clamp(offset, 0, document.getTextLength())) + 1;
+    }
+
+    private static int selectionEndLine(DataContext context, Editor editor, int startLine) {
+        var gutterLine = EditorGutterComponentEx.LOGICAL_LINE_AT_CURSOR.getData(context);
+        var selection = editor.getSelectionModel();
+        if ((gutterLine != null && gutterLine >= 0) || !selection.hasSelection()) {
+            return startLine;
+        }
+        var document = editor.getDocument();
+        // Selection end is exclusive: stopping at the next line's start must not include it.
+        var lastOffset = Math.clamp(selection.getSelectionEnd() - 1, 0, document.getTextLength());
+        return document.getLineNumber(lastOffset) + 1;
     }
 
     /**

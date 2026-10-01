@@ -18,6 +18,18 @@ internal class HunkReviewAssert private constructor(actual: String) :
         hasNote(body = body, source = "agent", side = "new", line = line)
     }
 
+    fun hasReviewerRange(body: String, firstLine: Int, lastLine: Int) = apply {
+        val matching = notes.filter { it.body() == body && it.string("source") == "user" }
+        if (matching.none { note ->
+                note.getAsJsonArray("newRange")?.let { range ->
+                    range.size() == 2 && range[0].asInt == firstLine && range[1].asInt == lastLine
+                } == true
+            }) {
+            failWithMessage("Expected a native reviewer range <%s-%s> for <%s>; matching notes <%s>",
+                firstLine, lastLine, body, matching)
+        }
+    }
+
     fun doesNotHaveNote(body: String) = apply {
         if (notes.any { it.body() == body }) {
             failWithMessage(

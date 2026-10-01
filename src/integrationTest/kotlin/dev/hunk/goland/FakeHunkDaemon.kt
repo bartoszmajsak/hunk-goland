@@ -107,6 +107,13 @@ internal class FakeHunkDaemon private constructor(
             "comment-rm" -> removeComment(exchange, request, raw)
             "test-register" -> registerManagedSession(exchange, request)
             "test-add-user" -> addManagedUserNote(exchange, request)
+            "test-selection" -> respond(exchange, synchronized(lock) {
+                JsonObject().apply {
+                    addProperty("filePath", state.navigation?.filePath)
+                    addProperty("line", state.navigation?.line)
+                    addProperty("endLine", state.navigation?.line)
+                }
+            })
             else -> respondError(exchange, "Unsupported UI fixture action")
         }
     }
@@ -202,6 +209,7 @@ internal class FakeHunkDaemon private constructor(
                 filePath = target.filePath,
                 side = target.side,
                 line = target.line,
+                endLine = request.positiveInt("endLine") ?: target.line,
                 body = body,
                 author = author,
             )
@@ -222,6 +230,7 @@ internal class FakeHunkDaemon private constructor(
             addProperty("filePath", action.filePath)
             addProperty("side", action.side)
             addProperty("line", action.line)
+            addProperty("endLine", action.endLine)
             addProperty("body", action.body)
             addProperty("author", action.author)
         }.toString())
@@ -362,6 +371,7 @@ internal class FakeHunkDaemon private constructor(
                     source = "user",
                     side = comment.side,
                     line = comment.line,
+                    endLine = comment.endLine,
                     body = comment.body,
                     author = comment.author,
                     createdAt = "2026-08-29T10:${(3 + index).toString().padStart(2, '0')}:00Z",
@@ -435,12 +445,14 @@ internal class FakeHunkDaemon private constructor(
         author: String,
         createdAt: String,
         editable: Boolean,
+        endLine: Int = line,
     ): JsonObject = JsonObject().apply {
         addProperty("noteId", id)
         addProperty("source", source)
         addProperty("filePath", filePath)
         addProperty("side", side)
         addProperty("line", line)
+        addProperty("endLine", endLine)
         addProperty("body", body)
         addProperty("author", author)
         addProperty("createdAt", createdAt)
@@ -494,6 +506,7 @@ internal class FakeHunkDaemon private constructor(
         val filePath: String,
         val side: String,
         val line: Int,
+        val endLine: Int,
         val body: String,
         val author: String,
     )

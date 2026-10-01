@@ -49,9 +49,10 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   review, opening the same file normally keeps that exact review. Comments and agent responses are
   visible and writable from either view without launching a competing working-tree session.
 
-Reviewer comments are currently single-line anchors. Multiline Markdown bodies are supported, but a
-multi-line code selection uses its first line. This is a plugin limitation: stock Hunk supports
-multiline code anchors and semantic replies.
+Reviewer comments can target a single line or a selected inclusive code range within one published
+Hunk hunk. A selection ending at the next line's start does not include that line. Gutter-menu
+actions target only the clicked line. Cards display range endpoints, and local recovery retains
+them. Multiline Markdown bodies are supported; semantic reply creation is not yet exposed in GoLand.
 
 ## How it works
 
@@ -60,7 +61,9 @@ creates an agent annotation. Protected review actions support draft text, editin
 but stock Hunk does not delegate their authorization capability to an external IDE.
 To preserve provenance, the plugin starts
 an unmodified Hunk TUI in an off-screen PTY that GoLand owns. It uses Hunk's native session API to
-navigate to the selected line, then drives the real `c` → body → `Ctrl+S` reviewer-composer path.
+navigate to the selected line, optionally extends a native visual selection with `v` and source-line
+movement, then drives the real `c` → body → `Ctrl+S` reviewer-composer path. Range submission checks
+the draft's target label before pasting and both endpoints in the daemon snapshot before success.
 Nothing is shown in GoLand's Terminal tool window.
 
 If an independently opened Hunk TUI already owns the worktree, GoLand can read its notes and delete
@@ -231,7 +234,8 @@ separate managed review for the same repository without displacing it. The test 
 sequential reviewer comments on one line (including a long multiline Markdown body), another
 comment after navigating to a different hunk line, exact daemon persistence as `source: "user"`, an
 externally added `source: "agent"` note appearing in the open GoLand thread, and native deletion
-without losing the remaining notes. It also runs the real
+without losing the remaining notes. It also verifies an inclusive code-range comment amid existing
+cards and preserves that range through the restart gate. It runs the real
 `hunk session review <id> --include-notes --json` command against the live managed session before the
 agent update, before deletion, and after deletion, asserting counts, provenance, bodies, and line
 targets. Machine-readable evidence, including both distinct session IDs, the CLI inspections, and

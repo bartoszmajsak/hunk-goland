@@ -11,6 +11,7 @@ public record HunkSessionNote(
         String createdAt,
         ReviewSide side,
         int line,
+        int endLine,
         boolean editable,
         boolean recovered
 ) {
@@ -24,7 +25,13 @@ public record HunkSessionNote(
             int line,
             boolean editable
     ) {
-        this(id, source, body, author, createdAt, side, line, editable, false);
+        this(id, source, body, author, createdAt, side, line, line, editable, false);
+    }
+
+    public HunkSessionNote(String id, HunkNoteSource source, String body, String author,
+                           String createdAt, ReviewSide side, int line, boolean editable,
+                           boolean recovered) {
+        this(id, source, body, author, createdAt, side, line, line, editable, recovered);
     }
 
     public HunkSessionNote {
@@ -34,6 +41,9 @@ public record HunkSessionNote(
         side = Objects.requireNonNull(side, "side");
         if (line < 1) {
             throw new IllegalArgumentException("line must be 1-based");
+        }
+        if (endLine < line) {
+            throw new IllegalArgumentException("endLine must not precede line");
         }
     }
 
@@ -50,6 +60,7 @@ public record HunkSessionNote(
                 createdAt,
                 side,
                 line,
+                endLine,
                 false,
                 true
         );
@@ -64,6 +75,7 @@ public record HunkSessionNote(
                 displayedCreatedAt,
                 side,
                 line,
+                endLine,
                 editable,
                 recovered
         );

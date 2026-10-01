@@ -78,7 +78,7 @@ class HunkRealDaemonE2eTest {
                 frame.setFocus()
                 frame.driver.closeAndDisableAllBalloonNotifications()
                 val editor = frame.codeEditorForFile("main.go")
-                editor.goToPosition(TestGoProject.CHANGED_LINE, 2)
+                ui.selectLines(editor, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
 
                 ui.openThreadWithAutomaticManagedReview(editor)
                 awaitCondition("first managed reviewer composer", 30.seconds) {
@@ -95,7 +95,9 @@ class HunkRealDaemonE2eTest {
                     reviewNotes(port, originalSessionId).takeIf {
                         HunkReviewAssert.containsNote(it, RECOVERY_REVIEW_COMMENT)
                     }
-                }
+                }.also { HunkReviewAssert.assertThat(it).hasReviewerRange(
+                    RECOVERY_REVIEW_COMMENT, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE,
+                ) }
 
                 post(
                     port,
@@ -151,6 +153,8 @@ class HunkRealDaemonE2eTest {
                     }
                 }
                 HunkReviewAssert.assertThat(recoveredNativeReview)
+                    .hasReviewerRange(RECOVERY_REVIEW_COMMENT,
+                        TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
                     .hasReviewerComment(
                         RECOVERY_REVIEW_COMMENT,
                         "user",
@@ -304,6 +308,19 @@ class HunkRealDaemonE2eTest {
                     )
 
                 ui.closeThread(editor)
+                ui.clearSelection(editor)
+                ui.selectLines(editor, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
+                ui.openThreadWithAutomaticManagedReview(editor)
+                ui.submitCommentWithButton(RANGE_COMMENT)
+                val rangePersisted = awaitValue("native inclusive range amid existing notes", 30.seconds) {
+                    reviewNotes(port, managedSessionId).takeIf { HunkReviewAssert.containsNote(it, RANGE_COMMENT) }
+                }
+                ui.waitForSubmission(TestGoProject.CHANGED_LINE, endLine = TestGoProject.UNCHANGED_HUNK_LINE)
+                HunkReviewAssert.assertThat(rangePersisted).hasReviewerRange(
+                    RANGE_COMMENT, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE,
+                )
+                ui.closeThread(editor)
+                ui.clearSelection(editor)
                 editor.goToPosition(TestGoProject.UNCHANGED_HUNK_LINE, 2)
                 ui.openThreadWithAutomaticManagedReview(editor)
                 ui.submitCommentWithButton(AFTER_NAVIGATION_COMMENT)
@@ -339,9 +356,10 @@ class HunkRealDaemonE2eTest {
                 assertLiveSessionCounts(
                     cliAfterReviewerComments,
                     expectedLiveComments = 0,
-                    expectedReviewNotes = 3,
+                    expectedReviewNotes = 4,
                 )
                 HunkReviewAssert.assertThat(cliAfterReviewerComments)
+                    .hasReviewerRange(RANGE_COMMENT, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(
                         WRAPPED_MARKDOWN_COMMENT,
@@ -394,7 +412,7 @@ class HunkRealDaemonE2eTest {
                     20.seconds,
                 ) {
                     liveSessionReview(executable, managedSessionId, port, configHome)
-                        .takeIf { review -> liveSessionCounts(review) == (1 to 4) }
+                        .takeIf { review -> liveSessionCounts(review) == (1 to 5) }
                 }
                 HunkReviewAssert.assertThat(cliBeforeDeletion)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
@@ -434,9 +452,10 @@ class HunkRealDaemonE2eTest {
                     20.seconds,
                 ) {
                     liveSessionReview(executable, managedSessionId, port, configHome)
-                        .takeIf { review -> liveSessionCounts(review) == (1 to 3) }
+                        .takeIf { review -> liveSessionCounts(review) == (1 to 4) }
                 }
                 HunkReviewAssert.assertThat(cliAfterDeletion)
+                    .hasReviewerRange(RANGE_COMMENT, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(
                         WRAPPED_MARKDOWN_COMMENT,
@@ -459,6 +478,7 @@ class HunkRealDaemonE2eTest {
                         })
                         add("firstPersistedReviewerComment", JsonParser.parseString(firstPersisted))
                         add("sequentiallyPersistedReviewerComments", JsonParser.parseString(sequentiallyPersisted))
+                        add("inclusiveRangeReviewerComment", JsonParser.parseString(rangePersisted))
                         add("allReviewerComments", JsonParser.parseString(allReviewerComments))
                         add("allNotesBeforeDeletion", JsonParser.parseString(allNotes))
                         add("allNotesAfterDeletion", JsonParser.parseString(afterDeletion))
@@ -710,6 +730,7 @@ class HunkRealDaemonE2eTest {
         const val DAEMON_KEEPALIVE_SECONDS = 15L
         val transports = java.util.concurrent.ConcurrentHashMap<Int, HunkSessionTransport>()
         const val REVIEW_COMMENT = "Persist this reviewer comment in the live Hunk session."
+        const val RANGE_COMMENT = "Review this complete import block, including its contextual closing line."
         const val WRAPPED_MARKDOWN_COMMENT =
             "**Keep this sequential reviewer comment intact even when the off-screen terminal " +
                 "wraps a deliberately long Markdown paragraph across multiple rendered rows; " +

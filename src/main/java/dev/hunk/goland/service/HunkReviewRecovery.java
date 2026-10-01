@@ -173,7 +173,8 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             String body,
             String author,
             ReviewSide side,
-            int line
+            int line,
+            int endLine
     ) {
         static SemanticNote from(HunkReviewNote value) {
             var note = value.note();
@@ -183,7 +184,8 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
                     note.body(),
                     note.source() == HunkNoteSource.AGENT ? note.author() : null,
                     note.side(),
-                    note.line()
+                    note.line(),
+                    note.endLine()
             );
         }
     }
@@ -289,6 +291,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
         public String createdAt;
         public String side;
         public int line;
+        public int endLine;
 
         public StoredNote() {
         }
@@ -304,6 +307,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             result.createdAt = note.createdAt();
             result.side = note.side().wireName();
             result.line = note.line();
+            result.endLine = note.endLine();
             return result;
         }
 
@@ -321,6 +325,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
                     createdAt,
                     noteSide,
                     line,
+                    endLine == 0 ? line : endLine,
                     !recovered && noteSource == HunkNoteSource.USER,
                     recovered
             ));
@@ -336,6 +341,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             result.createdAt = createdAt;
             result.side = side;
             result.line = line;
+            result.endLine = endLine;
             return result;
         }
     }

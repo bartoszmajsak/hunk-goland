@@ -12,6 +12,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import dev.hunk.goland.model.HunkReviewInput;
+import dev.hunk.goland.model.ReviewSide;
 import dev.hunk.goland.model.ReviewTarget;
 import dev.hunk.goland.settings.HunkSettings;
 
@@ -133,7 +134,7 @@ public final class HunkReviewLauncher implements Disposable {
     }
 
     /** Relays one already-validated comment through the managed TUI's native reviewer composer. */
-    public CommentRelayResult addReviewerComment(ReviewTarget target, String body)
+    CommentRelayResult addReviewerComment(ReviewTarget target, String body, ReviewerNavigation navigation)
             throws HunkSessionException {
         var managed = managedReview(target);
         var normalized = normalizeBody(body);
@@ -146,6 +147,10 @@ public final class HunkReviewLauncher implements Disposable {
                 var stage = CommentRelayStage.OPEN_DRAFT;
                 var stageMark = managed.output().mark();
                 try {
+                    // Navigation and visual selection belong to the same owned-composer transaction.
+                    // Retrying must start at the original line, not at the last range endpoint.
+                    navigation.navigate();
+                    selectReviewerRange(managed, target);
                     // Do not prefix this with a bare Escape. PTYs intentionally hold Escape for a
                     // short ambiguity window and can parse an immediately following `c` as Alt+C.
                     stageMark = managed.output().mark();
@@ -157,6 +162,14 @@ public final class HunkReviewLauncher implements Disposable {
                             "the reviewer composer",
                             COMPOSER_TIMEOUT
                     );
+                    if (target.endLine() > target.line()) {
+                        managed.output().awaitTextAfter(
+                                stageMark,
+                                nativeRangeLabel(target),
+                                "the selected reviewer range",
+                                COMPOSER_TIMEOUT
+                        );
+                    }
 
                     stage = CommentRelayStage.PASTE_BODY;
                     stageMark = managed.output().mark();
@@ -214,6 +227,33 @@ public final class HunkReviewLauncher implements Disposable {
             }
         }
         throw new IllegalStateException("Reviewer comment relay exhausted without a result.");
+    }
+
+    @FunctionalInterface
+    interface ReviewerNavigation {
+        void navigate() throws HunkSessionException;
+    }
+
+    private static void selectReviewerRange(ManagedReview managed, ReviewTarget target)
+            throws IOException, HunkSessionException {
+        if (target.endLine() == target.line()) {
+            return;
+        }
+        // Stock visual navigation traverses source rows on the anchored side, not wrapped
+        // terminal rows or note cards. Wait for each render before sending the next key.
+        var mark = managed.output().mark();
+        write(managed, "v");
+        managed.output().awaitOutputAfter(mark, COMPOSER_TIMEOUT);
+        for (var line = target.line(); line < target.endLine(); line++) {
+            mark = managed.output().mark();
+            write(managed, "j");
+            managed.output().awaitOutputAfter(mark, COMPOSER_TIMEOUT);
+        }
+    }
+
+    static String nativeRangeLabel(ReviewTarget target) {
+        var prefix = target.side() == ReviewSide.NEW ? "R" : "L";
+        return prefix + target.line() + "–" + prefix + target.endLine();
     }
 
     /** Cancels a draft or modal surface after daemon verification rejects a relay. */

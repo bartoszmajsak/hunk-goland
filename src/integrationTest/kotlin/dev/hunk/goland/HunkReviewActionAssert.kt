@@ -39,6 +39,11 @@ class HunkReviewActionAssert private constructor(actual: String) :
         hasString(noteId, "commentId")
     }
 
+    fun addsRangeComment(firstLine: Int, lastLine: Int, body: String) = apply {
+        addsComment(firstLine, body)
+        hasInt(lastLine, "endLine")
+    }
+
     private fun hasString(expected: String, vararg path: String) {
         val value = element(*path)?.takeIf(JsonElement::isJsonPrimitive)?.asString
         if (value != expected) {

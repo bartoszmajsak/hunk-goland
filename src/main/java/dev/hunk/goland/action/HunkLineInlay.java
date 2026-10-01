@@ -231,7 +231,8 @@ final class HunkLineInlay implements Disposable {
 
         var composerTitle = new JBLabel("Add a comment");
         composerTitle.setFont(composerTitle.getFont().deriveFont(Font.BOLD));
-        var composerHint = secondaryLabel("Markdown supported · Ctrl+Enter to add · saved to this line in Hunk");
+        var composerHint = secondaryLabel("Markdown supported · Ctrl+Enter to add · saved to "
+                + (target.endLine() == target.line() ? "this line" : "these lines") + " in Hunk");
         var composerHeading = verticalStack(composerTitle, composerHint);
         var resizeComposer = compactIconButton(AllIcons.Actions.Expandall, 22);
         updateComposerResizeButton(resizeComposer);
@@ -1037,6 +1038,9 @@ final class HunkLineInlay implements Disposable {
         var values = new ArrayList<String>();
         values.add(displayAuthor(note));
         formatTime(note.createdAt()).ifPresent(values::add);
+        if (note.endLine() > note.line()) {
+            values.add("Lines " + note.line() + "-" + note.endLine());
+        }
         if (note.recovered()) {
             values.add("Recovered locally");
         }

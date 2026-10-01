@@ -16,6 +16,28 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HunkReviewRecoveryTest {
+    @Test
+    void preservesRangeAnchorsThroughCacheReloadAndSemanticDeduplication() {
+        var recovery = new HunkReviewRecovery(CLOCK);
+        var range = new HunkReviewNote("cmd/main.go", new HunkSessionNote("range", HunkNoteSource.USER,
+                "Check block", "user", null, ReviewSide.NEW, 4, 6, true, false));
+        recovery.checkpoint(TARGET, "exact-diff", List.of(range));
+        var reloaded = new HunkReviewRecovery(CLOCK);
+        reloaded.loadState(recovery.getState());
+        assertThat(reloaded.plan(TARGET, "exact-diff", List.of()).reviewerComments()).containsExactly(range);
+        assertThat(reloaded.plan(TARGET, "exact-diff", List.of(
+                reviewer("single-line", "Check block", 4)
+        )).reviewerComments()).containsExactly(range);
+        assertThat(reloaded.plan(TARGET, "exact-diff", List.of(range)).reviewerComments()).isEmpty();
+    }
+
+    @Test
+    void readsLegacyCacheNotesAsSingleLineTargets() {
+        var stored = HunkReviewRecovery.StoredNote.from(reviewer("old", "Before ranges", 4));
+        stored.endLine = 0;
+        assertThat(stored.toModel(false).note().endLine()).isEqualTo(4);
+    }
+
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-09-03T08:00:00Z"),
             ZoneOffset.UTC

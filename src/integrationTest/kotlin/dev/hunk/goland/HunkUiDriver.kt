@@ -133,6 +133,15 @@ private interface IdeEditorComponentRef {
 private interface IdeEditorRef {
     fun getDocument(): IdeDocumentRef
     fun getCaretModel(): IdeCaretModelRef
+    fun getSelectionModel(): IdeSelectionModelRef
+}
+
+@Remote("com.intellij.openapi.editor.impl.SelectionModelImpl")
+private interface IdeSelectionModelRef {
+    fun setSelection(startOffset: Int, endOffset: Int)
+    fun removeSelection()
+    fun getSelectionStart(): Int
+    fun getSelectionEnd(): Int
 }
 
 @Remote("com.intellij.openapi.editor.impl.DocumentImpl")
@@ -469,8 +478,10 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         line: Int,
         side: String = "new",
         filePath: String = TestGoProject.MAIN_FILE,
+        endLine: Int = line,
     ) {
-        val message = "Comment submitted on $filePath:$line ($side)."
+        val range = if (endLine == line) "$line" else "$line-$endLine"
+        val message = "Comment submitted on $filePath:$range ($side)."
         awaitCondition("$side-side submission confirmation") {
             val composer = frame.textField { byAccessibleName("Hunk review comment") }
             frame.x { byVisibleText(message) }.present() && composer.text.isEmpty()
@@ -514,6 +525,33 @@ internal class HunkUiDriver(private val frame: UiComponent) {
                     .getCaretModel()
                     .getOffset()
             } == expectedOffset
+        }
+    }
+
+    /** Selects complete source lines, with the next line's start as the exclusive endpoint. */
+    fun selectLines(editor: JEditorUiComponent, firstLine: Int, lastLine: Int) {
+        val offsets = frame.driver.withContext<Pair<Int, Int>>(OnDispatcher.EDT, LockSemantics.NO_LOCK) {
+            val ideEditor = cast(editor.component, IdeEditorComponentRef::class).getEditor()
+            val document = ideEditor.getDocument()
+            require(firstLine >= 1 && lastLine >= firstLine && lastLine < document.getLineCount())
+            val start = document.getLineStartOffset(firstLine - 1)
+            val end = document.getLineStartOffset(lastLine)
+            ideEditor.getCaretModel().moveToOffset(start)
+            ideEditor.getSelectionModel().setSelection(start, end)
+            start to end
+        }
+        awaitCondition("selected lines $firstLine-$lastLine") {
+            frame.driver.withContext<Boolean>(OnDispatcher.EDT, LockSemantics.NO_LOCK) {
+                val selection = cast(editor.component, IdeEditorComponentRef::class)
+                    .getEditor().getSelectionModel()
+                selection.getSelectionStart() == offsets.first && selection.getSelectionEnd() == offsets.second
+            }
+        }
+    }
+
+    fun clearSelection(editor: JEditorUiComponent) {
+        frame.driver.withContext(OnDispatcher.EDT, LockSemantics.NO_LOCK) {
+            cast(editor.component, IdeEditorComponentRef::class).getEditor().getSelectionModel().removeSelection()
         }
     }
 

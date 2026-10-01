@@ -72,6 +72,11 @@ menu, or the Hunk toolbar action. Select a line on the current/right side, inclu
 newly added file. The line must be inside a hunk published by Hunk: changed lines and surrounding
 context qualify; arbitrary lines elsewhere do not. A line does not need an existing comment.
 
+To comment on a block, select its code and invoke the editor menu or Hunk toolbar action. The
+selection must stay inside one Hunk hunk on the current/right side. The thread shows the inclusive
+range and each range card labels its endpoints. A selection ending at the next line's start does
+not include that line. A line-number menu always targets the clicked line, not an existing selection.
+
 The review thread appears below the line. Write your comment in the Markdown composer and press
 **Ctrl+Enter** or click **Add comment**. Enter inserts a newline. Expand the composer or conversation
 area for longer text, and collapse individual comment cards when useful. The newest comment appears
@@ -101,8 +106,8 @@ the next two-second refresh; the pane also has a **Refresh** action.
 
 Reviewer notes can be deleted using their trash action and inline confirmation. Editing a saved
 reviewer note is not yet supported by this plugin, although stock Hunk supports saved-note editing.
-Comments currently target one source line; a multi-line selection does not create a code-range
-comment in GoLand. Stock Hunk also supports code ranges and semantic replies.
+Comments can target one source line or a selected code range within one published hunk. Semantic
+reply creation is not yet available in GoLand.
 
 ## Sessions and restarts
 

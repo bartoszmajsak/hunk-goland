@@ -1,10 +1,22 @@
 package dev.hunk.goland.service;
 
+import dev.hunk.goland.model.HunkReviewInput;
+import dev.hunk.goland.model.ReviewSide;
+import dev.hunk.goland.model.ReviewTarget;
 import org.junit.jupiter.api.Test;
+
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HunkReviewLauncherTest {
+    @Test
+    void usesTheStockInclusiveDraftRangeLabel() {
+        assertThat(HunkReviewLauncher.nativeRangeLabel(new ReviewTarget(Path.of("/workspace/repository"),
+                "cmd/main.go", ReviewSide.NEW, 4, 6, HunkReviewInput.workingTree())))
+                .isEqualTo("R4–R6");
+    }
+
     @Test
     void usesABoundedFirstLineFragmentForWrappedMarkdownConfirmation() {
         var body = "**Please keep this deliberately long reviewer comment readable even when "

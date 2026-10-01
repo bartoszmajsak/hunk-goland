@@ -44,8 +44,9 @@ research under `docs/`; the local journal is not required to build or test.
 - Saved reviewer-note deletion is supported by the session CLI/API; editing is not exposed through
   that integration. Hunk 0.23's own review UI has additional edit/reply actions, but `editable: true`
   alone does not authorize a new plugin API or infer access to its protected review surface.
-- Reviewer anchors are single-line targets inside published Hunk hunks. Multiline Markdown bodies are
-  valid, but a multi-line code selection resolves to one line.
+- Reviewer anchors may cover an inclusive source range inside one published Hunk hunk. Preserve both
+  endpoints through editor/unified-diff mapping, exact daemon verification, and restart recovery.
+  Gutter actions remain single-line targets, even when the editor has a selection elsewhere.
 - Diff composition is current/right (`new`) side only. Support changed and contextual lines inside a
   hunk, split and unified viewers, and one-sided added-file diffs; reject out-of-hunk targets.
 - Match the actual JetBrains comparison, not only the repository root: working tree uses
@@ -100,6 +101,8 @@ research under `docs/`; the local journal is not required to build or test.
   long wrapped multiline Markdown body, another comment after navigation, an external agent update,
   exact daemon verification, live `hunk session review --include-notes --json` inspection, and
   selective deletion.
+- Range gates must include a selection ending at the next line's exclusive start, native range
+  creation amid existing note cards, exact CLI range read-back, and same-profile range recovery.
 - Keep the same-profile real-GoLand restart gate: the original managed TUI must exit, a fresh session
   must receive recovered reviewer comments as `source: "user"`, and agent history must remain local.
 - Keep `realProjectDiagnostic` as an optional but gating reproduction for the KServe **Compare with

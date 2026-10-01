@@ -90,14 +90,13 @@ public final class HunkSessionService {
                 .map(HunkSessionNote::id)
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
 
-        navigate(origin, target);
         LOG.info("event=" + event + "-start"
                 + " sessionId=" + launcher.sessionId(target).orElse("unknown")
                 + " target=" + target.displayName()
                 + " existingNotes=" + existingNoteIds.size()
                 + " bodyChars=" + body.length());
         var startedAt = System.nanoTime();
-        var relay = launcher.addReviewerComment(target, body);
+        var relay = launcher.addReviewerComment(target, body, () -> navigate(origin, target));
         try {
             var persisted = awaitPersistedReviewerNote(
                     origin,
@@ -284,6 +283,7 @@ public final class HunkSessionService {
                 .filter(note -> note.note().source() == HunkNoteSource.USER)
                 .filter(note -> note.note().side() == target.side())
                 .filter(note -> note.note().line() == target.line())
+                .filter(note -> note.note().endLine() == target.endLine())
                 .filter(note -> note.note().body().equals(body))
                 .findFirst();
     }
@@ -476,6 +476,7 @@ public final class HunkSessionService {
                             reviewNote.filePath(),
                             note.side(),
                             note.line(),
+                            note.endLine(),
                             target.reviewInput()
                     );
                     var persisted = submitReviewerComment(
@@ -609,6 +610,7 @@ public final class HunkSessionService {
         }
         value.addProperty("side", note.side().wireName());
         value.addProperty("line", note.line());
+        value.addProperty("endLine", note.endLine());
         value.addProperty("editable", note.editable());
         value.addProperty("recoveredLocally", note.recovered());
         return value;
@@ -694,7 +696,8 @@ public final class HunkSessionService {
             var matching = hunks.asList().stream()
                     .filter(JsonElement::isJsonObject)
                     .map(JsonElement::getAsJsonObject)
-                    .filter(hunk -> rangeContains(hunk.getAsJsonArray(rangeName), target.line()))
+                    .filter(hunk -> rangeContains(hunk.getAsJsonArray(rangeName), target.line())
+                            && rangeContains(hunk.getAsJsonArray(rangeName), target.endLine()))
                     .map(hunk -> nonNegativeInt(hunk.get("index")))
                     .flatMap(Optional::stream)
                     .findFirst();
@@ -782,6 +785,7 @@ public final class HunkSessionService {
                     string(value, "createdAt"),
                     location.side(),
                     location.line(),
+                    location.endLine(),
                     booleanValue(value.get("editable")).orElse(source == HunkNoteSource.USER),
                     booleanValue(value.get("recoveredLocally")).orElse(false)
             ));
@@ -794,15 +798,25 @@ public final class HunkSessionService {
         var explicitSide = ReviewSide.fromWireName(string(value, "side"));
         var explicitLine = positiveInt(value.get("line"));
         if (explicitSide != null && explicitLine != null) {
-            return new NoteLocation(explicitSide, explicitLine);
+            var endLine = value.has("endLine") ? positiveInt(value.get("endLine")) : explicitLine;
+            return endLine == null ? null : new NoteLocation(explicitSide, explicitLine, endLine);
         }
 
         var newLine = rangeStart(value.getAsJsonArray("newRange"));
         if (newLine != null) {
-            return new NoteLocation(ReviewSide.NEW, newLine);
+            return noteRange(ReviewSide.NEW, value.getAsJsonArray("newRange"));
         }
         var oldLine = rangeStart(value.getAsJsonArray("oldRange"));
-        return oldLine == null ? null : new NoteLocation(ReviewSide.OLD, oldLine);
+        return oldLine == null ? null : noteRange(ReviewSide.OLD, value.getAsJsonArray("oldRange"));
+    }
+
+    private static NoteLocation noteRange(ReviewSide side, JsonArray range) {
+        if (range == null || range.size() != 2) {
+            return null;
+        }
+        var start = positiveInt(range.get(0));
+        var end = positiveInt(range.get(1));
+        return start == null || end == null ? null : new NoteLocation(side, start, end);
     }
 
     private static Integer rangeStart(JsonArray range) {
@@ -977,7 +991,7 @@ public final class HunkSessionService {
         return "Hunk session request failed with HTTP " + status + ".";
     }
 
-    private record NoteLocation(ReviewSide side, int line) {
+    private record NoteLocation(ReviewSide side, int line, int endLine) {
     }
 
     private record RecoveredSessionKey(String sessionId, String fingerprint) {

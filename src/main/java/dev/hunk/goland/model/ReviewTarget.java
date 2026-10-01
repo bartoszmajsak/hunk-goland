@@ -8,10 +8,16 @@ public record ReviewTarget(
         String filePath,
         ReviewSide side,
         int line,
+        int endLine,
         HunkReviewInput reviewInput
 ) {
     public ReviewTarget(Path repositoryRoot, String filePath, ReviewSide side, int line) {
-        this(repositoryRoot, filePath, side, line, HunkReviewInput.workingTree());
+        this(repositoryRoot, filePath, side, line, line, HunkReviewInput.workingTree());
+    }
+
+    public ReviewTarget(Path repositoryRoot, String filePath, ReviewSide side, int line,
+                        HunkReviewInput reviewInput) {
+        this(repositoryRoot, filePath, side, line, line, reviewInput);
     }
 
     public ReviewTarget {
@@ -25,9 +31,13 @@ public record ReviewTarget(
         if (line < 1) {
             throw new IllegalArgumentException("line must be 1-based");
         }
+        if (endLine < line) {
+            throw new IllegalArgumentException("endLine must not precede line");
+        }
     }
 
     public String displayName() {
-        return filePath + ":" + line + " (" + side.wireName() + ")";
+        return filePath + ":" + line + (endLine == line ? "" : "-" + endLine)
+                + " (" + side.wireName() + ")";
     }
 }

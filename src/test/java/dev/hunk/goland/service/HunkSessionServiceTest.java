@@ -2,6 +2,7 @@ package dev.hunk.goland.service;
 
 import com.google.gson.JsonParser;
 import dev.hunk.goland.model.HunkNoteSource;
+import dev.hunk.goland.model.HunkReviewInput;
 import dev.hunk.goland.model.HunkSessionNote;
 import dev.hunk.goland.model.ReviewSide;
 import dev.hunk.goland.model.ReviewTarget;
@@ -14,6 +15,58 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HunkSessionServiceTest {
+    @Test
+    void retainsInclusiveUpstreamRangesAndRejectsMalformedEnds() {
+        var note = JsonParser.parseString("""
+                {"noteId":"range","source":"user","body":"Check this block",
+                 "newRange":[4,6]}
+                """).getAsJsonObject();
+        assertThat(HunkSessionService.parseNote(note)).get().satisfies(parsed -> {
+            assertThat(parsed.line()).isEqualTo(4);
+            assertThat(parsed.endLine()).isEqualTo(6);
+            assertThat(parsed.asRecoveredHistory().endLine()).isEqualTo(6);
+            assertThat(parsed.withDisplayedCreationTime("2026-10-01T10:00:00Z").endLine()).isEqualTo(6);
+        });
+        note.add("newRange", JsonParser.parseString("[6,4]"));
+        assertThat(HunkSessionService.parseNote(note)).isEmpty();
+        note.add("newRange", JsonParser.parseString("[4]"));
+        assertThat(HunkSessionService.parseNote(note)).isEmpty();
+    }
+
+    @Test
+    void verifiesTheExactRangeRatherThanOnlyItsFirstLine() {
+        var review = JsonParser.parseString("""
+                {"reviewNotes":[
+                  {"noteId":"single","filePath":"cmd/main.go","source":"user",
+                   "body":"Check","newRange":[4,4]},
+                  {"noteId":"other-range","filePath":"cmd/main.go","source":"user",
+                   "body":"Check","newRange":[4,7]},
+                  {"noteId":"correct","filePath":"cmd/main.go","source":"user",
+                   "body":"Check","newRange":[4,6]}
+                ]}
+                """).getAsJsonObject();
+        var target = new ReviewTarget(Path.of("/workspace/repository"), "cmd/main.go",
+                ReviewSide.NEW, 4, 6, HunkReviewInput.workingTree());
+        assertThat(HunkSessionService.newReviewerNote(review, target, "Check", Set.of()))
+                .get().extracting(note -> note.note().id()).isEqualTo("correct");
+        assertThat(HunkSessionService.newReviewerNote(review, target, "Check", Set.of("correct")))
+                .isEmpty();
+    }
+
+    @Test
+    void requiresEverySelectedLineToBelongToOnePublishedHunk() throws HunkSessionException {
+        var file = JsonParser.parseString("""
+                {"hunks":[{"index":0,"newRange":[4,6]}, {"index":1,"newRange":[9,11]}]}
+                """).getAsJsonObject();
+        var root = Path.of("/workspace/repository");
+        assertThat(HunkSessionService.hunkIndex(file, new ReviewTarget(root, "cmd/main.go",
+                ReviewSide.NEW, 4, 6, HunkReviewInput.workingTree()))).isZero();
+        assertThatThrownBy(() -> HunkSessionService.hunkIndex(file, new ReviewTarget(root,
+                "cmd/main.go", ReviewSide.NEW, 4, 9, HunkReviewInput.workingTree())))
+                .isInstanceOf(HunkSessionException.class)
+                .hasMessageContaining("is not part of a hunk");
+    }
+
     @Test
     void parsesReviewerProvenanceAndExactLine() {
         var payload = JsonParser.parseString("""
