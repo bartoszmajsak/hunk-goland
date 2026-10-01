@@ -77,5 +77,4 @@ credentials would be configured separately. The public release is Linux-tested; 
 operating systems need their own native integration gates before they are advertised.
 
 `JOURNEY.md` is a local ignored journal. It is not included in documentation, source tracking,
-or release artifacts. Its earlier commits remain in local Git history; removing historical copies
-before public repository creation would require a separate history-rewrite decision.
+or release artifacts. Historical copies were removed before publishing the repository.
