@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,16 @@ class PublicationGuardsTest(unittest.TestCase):
     def test_installer_and_release_guard_pin_same_version(self):
         installer = (Path(__file__).resolve().parents[1] / "install-ci-hunk").read_text()
         self.assertIn(f"hunk_version={ci.HUNK_VERSION}\n", installer)
+
+    def test_historical_audit_uses_portable_commit_pinned_sources(self):
+        audit = (ci.ROOT / "docs/upstream-no-change-e2e.md").read_text()
+        self.assertNotIn("/home/", audit)
+        self.assertNotIn("/Users/", audit)
+        self.assertNotIn("../../../oss/hunk/", audit)
+        self.assertIn("Unshipped capability-capture experiment", audit)
+        links = re.findall(r"https://github\.com/modem-dev/hunk/blob/([^/]+)/", audit)
+        self.assertTrue(links, "Historical audit has no upstream source citations")
+        self.assertEqual(set(links), {"c75a9a3b084059d8ff4ccfb257251e594a40b4a5"})
 
     def test_newly_copied_old_test_results_are_rejected(self):
         self.junit(timestamp=(self.since - timedelta(days=1)).isoformat())

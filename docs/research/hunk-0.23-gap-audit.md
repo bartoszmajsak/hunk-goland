@@ -35,7 +35,7 @@ or as proof that the current PTY bridge can be removed.
 | Editing and deletion | Saved reviewer editing exists in the TUI and protected action vocabulary. The ordinary session API supports removal, not saved reviewer editing. | GoLand offers native deletion, but no edit control. The limitation is the exposed integration, not an absent upstream edit intent. [Edit planning](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/intents.ts#L534-L568), [session schema](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/protocolSchemas.ts#L240-L259). |
 | Replies | Reviewer replies are semantic notes with parent relationships. Agent CLI comments can also reply to a note. | Native parent IDs are retained for display and recovery; cards label their parent and explain Hunk's parent-deletion restriction. GoLand's add-comment control still creates a root reviewer note, not a reply to a selected card. Missing reviewer replies remain read-only local history rather than being replayed as unrelated roots. [Reply planning](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/intents.ts#L570-L600), [deletion constraint](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/intents.ts#L764-L792), [CLI reference](https://github.com/modem-dev/hunk/blob/v0.23.0/website/src/content/docs/docs/reference/cli.md#L453-L484). |
 | Multiline anchors | Reviewer targets can contain inclusive source ranges, with coverage validation. This shipped in 0.22. | Implemented through the owned native visual selection for ranges within one published hunk, with exact endpoint verification and restart replay. Gutter actions remain single-line. Multiline Markdown bodies remain supported. [0.22 release notes](https://github.com/modem-dev/hunk/blob/v0.23.0/website/src/content/docs/changelog/0.22.md#L58-L60), [range validation](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L327-L364). |
-| Outside the patch | The protected reviewer flow supports a single restored source line from an expanded gap, with explicit source proof. This does not mean arbitrary unrelated files or unverified targets are accepted. | GoLand intentionally requires a single line inside a published hunk. Expanded-gap reviewer targets are not implemented. [Expanded-line proof](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L134-L143), [wire validation](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L437-L454). |
+| Outside the patch | The protected reviewer flow supports a single restored source line from an expanded gap, with explicit source proof. This does not mean arbitrary unrelated files or unverified targets are accepted. | GoLand requires a line or selected range entirely inside one published hunk. Expanded-gap reviewer targets are not implemented. [Expanded-line proof](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L134-L143), [wire validation](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L437-L454). |
 | Push refresh | Protected review SSE exists. The session WebSocket connects review producers to the daemon. The clear review capability stays in the owner process; only its digest is registered. | The plugin uses bounded two-second session polling. Signed caller authentication does not supply a clear browser capability, so neither SSE nor protected note actions are automatically available. [Capability lifetime](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/app/review/capability.ts), [HTTP routing](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/broker/brokerServer.ts#L736-L757). |
 | Durable sessions | Review state is held in an in-memory store. The daemon mirrors a live producer, rather than persisting its review. Persistence work remains open and unmerged. | Exact-fingerprint local recovery is plugin cache assistance, not native Hunk persistence. Reviewer replay creates new native IDs/timestamps; missing agent responses remain local history. [Review store](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/store.ts), [persistence issue](https://github.com/modem-dev/hunk/issues/113), [sidecar proposal](https://github.com/modem-dev/hunk/pull/473). |
 | Changed review input | Existing notes remain tracked by the store across document reconciliation; stale anchors can remain renderable, while orphaned anchors are not rendered. The exported session summary follows notes associated with the current files. | A live session and its visible/exported note set are not equivalent. Restart recovery refuses stale fingerprints and does not promise to move comments onto agent-modified code. [Reconciliation](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/reducer.ts#L120-L156), [visibility policy](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/state.ts#L24-L36), [snapshot projection](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/ui/hooks/useTerminalReview.ts#L1649-L1690). |
@@ -67,23 +67,23 @@ Hunk saves a durable database after its owner exits. The restart scenario verifi
 separate local recovery behavior. Existing screenshots or JSON evidence are not a current test
 result without matching fresh successful JUnit reports.
 
-## README corrections identified
+## Documentation corrections completed
 
-1. Replace the 0.20-era opening of **How it works** with the tested 0.23 session-API limitation.
+1. **How it works** now explains the tested 0.23 session-API limitation.
    Protected draft-body actions now exist; the ordinary session endpoint still does not expose them.
-2. Describe lack of editing as a current plugin integration limitation. Remove the assertion that
-   upstream has no saved-note edit intent.
-3. Describe single-line code anchors as the plugin's supported scope. Remove the assertion that
-   upstream's reviewer composer cannot represent a multiline target.
-4. Explicitly identify the normal UI suite's fake transport and reserve stock-Hunk provenance and
-   live-storage claims for the native gate.
-5. Add the 0.23 daemon upgrade procedure: inspect `hunk daemon status`; an old running daemon is not
+2. Editing is described as a current plugin integration limitation, not an absent upstream intent.
+3. The implemented selected-range comments are documented, including same-hunk validation and exact
+   native range verification. The earlier claim that upstream cannot represent multiline anchors
+   was removed.
+4. The normal UI suite's fake transport is explicit; stock-Hunk provenance and live-storage claims
+   are reserved for the native gate.
+5. The 0.23 daemon upgrade procedure is documented: inspect `hunk daemon status`; an old daemon is not
    upgraded merely by replacing the binary. `hunk daemon restart` requires a deliberate decision
    because it disconnects incompatible windows and their in-window notes can be lost.
    [Released daemon guidance](https://github.com/modem-dev/hunk/blob/v0.23.0/website/src/content/docs/docs/agents/live-session-control.md#L50-L54).
-6. Replace personal absolute source/preload paths and sibling-checkout links in the historical
-   audit with portable placeholders and GitHub permalinks pinned to that audit's original commit.
-   Keep the date and historical scope explicit, and mark the preload experiment as unshipped.
+6. Personal absolute source/preload paths and sibling-checkout links in the historical audit were
+   replaced by portable placeholders and GitHub permalinks pinned to the original commit. The
+   historical scope is explicit and the preload experiment is marked unshipped.
 
 The older upstream audit remains useful only as historical evidence for its explicitly stated
 commit. Its source-preload capability experiment is not the shipped runtime or native E2E path.
