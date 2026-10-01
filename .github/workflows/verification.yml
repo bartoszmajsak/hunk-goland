@@ -83,7 +83,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
         run: |
-          python3 scripts/build-site.py --since "$HUNK_VERIFICATION_STARTED_AT"
+          python3 scripts/build-site.py --since "$HUNK_VERIFICATION_STARTED_AT" --refresh
           python3 scripts/ci.py package --since "$HUNK_VERIFICATION_STARTED_AT" --tag "$RELEASE_TAG"
 
       - name: Save IDE downloads after successful trusted run

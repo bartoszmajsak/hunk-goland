@@ -39,16 +39,24 @@ Default-branch runs deploy through the Pages job. PRs upload `hunk-goland-docs` 
 preview without Pages permissions. The site has a version-specific page, and every release
 attaches a complete documentation archive to preserve that version when the latest site changes.
 
-To generate a local preview after a fresh Driver run, record its start time first:
+The local UI-test runner also refreshes `build/site/index.html` automatically after the complete
+fixture suite passes. Install `pandoc` and Python 3, then run:
 
 ```bash
-verification_start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-./scripts/run-ui-tests weston integrationTest --rerun-tasks --no-build-cache
-python3 scripts/build-site.py --since "$verification_start" --output /tmp/hunk-docs-preview
+./scripts/run-ui-tests weston integrationTest
 ```
 
-Install `pandoc` and use a previously unused output directory. Open its `index.html` to review the
-guide and feature gallery. Old screenshots are intentionally rejected.
+Use `native` for visible GoLand or `xvfb` for headless X11. The runner records the evidence start
+time and forces fresh tests instead of reusing cached results. Open `build/site/index.html` after
+it succeeds. The generator stages the complete site first and retains an existing generated guide
+under `build/site.previous-*/site/`. Failed tests, stale or missing captures, and rendering failures
+leave the previous guide untouched. Unrelated files and symlinked output directories are never replaced.
+
+For focused tests without guide generation, use `HUNK_BUILD_GUIDE=0 ./scripts/run-ui-tests ...`.
+Calling `./gradlew integrationTest` directly remains test-only; `buildPlugin` does not launch the IDE
+or generate documentation. To render an already verified capture set separately, invoke
+`scripts/build-site.py --since <verification-start-time>` with `--refresh`, or with `--output` pointing
+to a new preview directory. Old screenshots are intentionally rejected.
 
 ## Cut a draft release
 

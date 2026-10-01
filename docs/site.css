@@ -13,6 +13,7 @@ section { scroll-margin-top: 2rem; }
 #guide { max-width: 880px; }
 #features { margin-top: 4rem; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 1.5rem; }
+.guide-captures { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); margin: 1.5rem 0 2.5rem; }
 article { background: var(--panel); border: 1px solid var(--border); border-radius: 1rem; padding: 1.3rem; }
 article h3 { margin-top: 0; }
 article p { color: var(--muted); }

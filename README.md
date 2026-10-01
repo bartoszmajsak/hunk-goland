@@ -204,6 +204,12 @@ Screenshots and the reviewable HTML report are written to
 `build/reports/ux/index.html`; the focused cross-view report is
 `build/reports/ux/cross-view/index.html`.
 
+The runner automatically refreshes the illustrated user guide at `build/site/index.html` after
+the full fixture suite passes, using its fresh screenshots and the tracked guide. Python 3 and
+`pandoc` are required. Previous generated guides are retained beside it; failed tests or stale
+captures do not replace them. Set `HUNK_BUILD_GUIDE=0` for focused, test-only runs. Direct Gradle
+invocations do not generate the guide. See [living documentation](docs/releasing.md#living-documentation).
+
 `realHunkE2e` is enabled and runs separately against an installed, unmodified upstream Hunk binary:
 
 ```bash

@@ -12,10 +12,6 @@ if [[ $# -eq 0 ]]; then
 else
   gradle_arguments=("$@")
 fi
-gradle_arguments+=(--console=plain --no-daemon)
-
-gradle=("$project_root/gradlew" "${gradle_arguments[@]}")
-
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "The '$display_backend' display adapter requires '$1' on PATH." >&2
@@ -23,14 +19,41 @@ require_command() {
   fi
 }
 
+generate_guide=false
+for argument in "${gradle_arguments[@]}"; do
+  case "$argument" in
+    integrationTest|:integrationTest) generate_guide=true ;;
+  esac
+done
+for argument in "${gradle_arguments[@]}"; do
+  case "$argument" in
+    --dry-run|-m|--help|-h|--version|-v) generate_guide=false ;;
+  esac
+done
+case "${HUNK_BUILD_GUIDE:-1}" in
+  0) generate_guide=false ;;
+  1) ;;
+  *) echo "HUNK_BUILD_GUIDE must be 0 or 1." >&2; exit 2 ;;
+esac
+
+if "$generate_guide"; then
+  require_command python3
+  require_command pandoc
+  guide_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # A cached/partial visual run is not fresh screenshot evidence for the guide.
+  gradle_arguments+=(--rerun-tasks --no-build-cache)
+fi
+gradle_arguments+=(--console=plain --no-daemon)
+gradle=("$project_root/gradlew" "${gradle_arguments[@]}")
+
 case "$display_backend" in
   native)
-    exec "${gradle[@]}" -PuiDisplayBackend=native
+    "${gradle[@]}" -PuiDisplayBackend=native
     ;;
 
   xvfb)
     require_command xvfb-run
-    exec xvfb-run \
+    xvfb-run \
       --auto-servernum \
       --server-args="-screen 0 1920x1080x24" \
       "${gradle[@]}" \
@@ -105,3 +128,7 @@ case "$display_backend" in
     exit 2
     ;;
 esac
+
+if "$generate_guide"; then
+  python3 "$project_root/scripts/build-site.py" --since "$guide_started_at" --refresh
+fi
