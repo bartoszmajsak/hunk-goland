@@ -7,6 +7,8 @@ diff viewers.
 For the current upstream integration contract and remaining gaps, see
 [the Hunk 0.23 audit](docs/research/hunk-0.23-gap-audit.md) and
 [contributor instructions](AGENTS.md).
+The [native-control research](docs/research/hunk-0.23-native-controls.md) explains which TUI
+operations can be addressed safely and why exact-note editing, reply creation, and SSE remain gaps.
 
 Start with the [user guide](docs/user-guide.md) for Hunk installation, plugin setup, reviewing,
 agent handoff, and troubleshooting. Hunk is a required external dependency, not bundled in the ZIP.

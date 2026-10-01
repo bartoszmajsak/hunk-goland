@@ -19,9 +19,11 @@ See [the native gate](../../src/integrationTest/kotlin/dev/hunk/goland/HunkRealD
 
 Some first-iteration limitations are no longer limitations of upstream Hunk itself. Upstream
 now has reviewer editing, replies, multiline anchors, and a review action that supplies draft
-text. Those capabilities belong to a protected review surface that the current plugin does not
-have a supported way to authorize. They must not be presented as already available in GoLand,
-or as proof that the current PTY bridge can be removed.
+text. Selected ranges are now implemented through native TUI controls, and reply relationships
+are preserved when reading and recovering notes. Protected review actions still lack a supported
+authorization handoff to the plugin. Native editing and reply primitives also lack a public exact
+saved-note selector. Unsupported operations must not be presented as available in GoLand or as
+proof that the PTY bridge can be removed.
 [Review intents](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/core/review/intents.ts#L110-L130),
 [wire actions](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/reviewProtocol.ts#L145-L193),
 [capability authorization](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/broker/browserReviewServer.ts#L315-L324).
@@ -49,6 +51,10 @@ from the released source, not a claim that the protected actions do not exist.
 [Capability generator](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/app/review/capability.ts#L43-L50),
 [registration](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/app/session/registration.ts#L95-L106),
 [session schema](https://github.com/modem-dev/hunk/blob/v0.23.0/packages/hunk/src/session/protocolSchemas.ts#L191-L286).
+
+The [native-control audit and isolated probes](hunk-0.23-native-controls.md) distinguish verified
+range composition from editing/replying to a known-active note, which does not provide arbitrary
+note-ID targeting. Expanded-gap source proof is separately source-confirmed, not runtime-proven.
 
 ## What the tests prove
 
