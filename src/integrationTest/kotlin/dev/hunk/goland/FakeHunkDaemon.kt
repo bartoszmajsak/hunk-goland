@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.hunk.goland.testing.HunkBrokerTestAuthentication
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -15,7 +16,9 @@ import java.util.concurrent.TimeUnit
 /** A typed in-process adapter for the Hunk session seam exercised by the GoLand UI test. */
 internal class FakeHunkDaemon private constructor(
     private val reviewerName: String,
+    val runtimeDirectory: Path,
 ) : AutoCloseable {
+    private val authentication = HunkBrokerTestAuthentication(runtimeDirectory)
     private val lock = Any()
     private val state = ReviewState()
     private val requests = LinkedBlockingQueue<String>()
@@ -24,6 +27,7 @@ internal class FakeHunkDaemon private constructor(
     }
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         executor = this@FakeHunkDaemon.executor
+        authentication.install(this)
         createContext("/session-api/capabilities", ::handleCapabilities)
         createContext("/session-api", ::handleSessionRequest)
         start()
@@ -69,11 +73,12 @@ internal class FakeHunkDaemon private constructor(
     }
 
     private fun handleCapabilities(exchange: HttpExchange) {
+        if (!authentication.authorize(exchange, byteArrayOf(), false)) return
         respond(
             exchange,
             JsonObject().apply {
                 addProperty("version", 1)
-                addProperty("daemonVersion", 11)
+                addProperty("daemonVersion", 16)
                 add("actions", JsonArray().apply {
                     add("review")
                     add("navigate")
@@ -84,14 +89,18 @@ internal class FakeHunkDaemon private constructor(
     }
 
     private fun handleSessionRequest(exchange: HttpExchange) {
-        val raw = exchange.requestBody.bufferedReader().use { it.readText() }
+        val bytes = exchange.requestBody.use { it.readBytes() }
+        val raw = String(bytes, StandardCharsets.UTF_8)
         val request = parseObject(raw)
         if (request == null) {
             respondError(exchange, "Request body must be a JSON object")
             return
         }
 
-        when (request.string("action")) {
+        val action = request.string("action")
+        // Test-only endpoints are the fixture's native-composer relay, never stock actions.
+        if (!action.orEmpty().startsWith("test-") && !authentication.authorize(exchange, bytes, action != "list")) return
+        when (action) {
             "list" -> listSessions(exchange)
             "review" -> readReview(exchange, request)
             "navigate" -> navigate(exchange, request)
@@ -439,10 +448,7 @@ internal class FakeHunkDaemon private constructor(
     }
 
     private fun respond(exchange: HttpExchange, body: JsonObject, status: Int = 200) {
-        val bytes = body.toString().toByteArray(StandardCharsets.UTF_8)
-        exchange.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
-        exchange.sendResponseHeaders(status, bytes.size.toLong())
-        exchange.responseBody.use { it.write(bytes) }
+        authentication.respond(exchange, body, status)
     }
 
     private fun respondError(exchange: HttpExchange, message: String) {
@@ -497,7 +503,7 @@ internal class FakeHunkDaemon private constructor(
 
         private const val GENERATION = "generation:ui-test:1"
         private const val INITIAL_REVIEWER_NOTE_ID = "user:review-new"
-        fun start(reviewerName: String): FakeHunkDaemon = FakeHunkDaemon(reviewerName)
+        fun start(reviewerName: String, runtimeDirectory: Path): FakeHunkDaemon = FakeHunkDaemon(reviewerName, runtimeDirectory)
 
         private fun parseObject(value: String): JsonObject? = runCatching {
             JsonParser.parseString(value).takeIf { it.isJsonObject }?.asJsonObject

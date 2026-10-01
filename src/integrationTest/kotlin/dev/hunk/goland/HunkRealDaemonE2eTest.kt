@@ -3,7 +3,7 @@ package dev.hunk.goland
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.intellij.execution.configurations.PtyCommandLine
+import com.pty4j.PtyProcessBuilder
 import com.intellij.driver.sdk.closeAndDisableAllBalloonNotifications
 import com.intellij.driver.sdk.openFile
 import com.intellij.driver.sdk.ui.components.common.codeEditorForFile
@@ -19,9 +19,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.net.ServerSocket
 import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import dev.hunk.goland.service.HunkSessionTransport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,6 +63,7 @@ class HunkRealDaemonE2eTest {
                     addSystemProperty("hunk.executable", executable.toString())
                     addSystemProperty("hunk.diagnostics", "true")
                     withEnv("XDG_CONFIG_HOME", configHome.toString())
+                    hunkTestEnvironment(configHome).forEach { (name, value) -> withEnv(name, value) }
                     System.getProperty("hunk.uiToolkit")
                         ?.takeIf(String::isNotBlank)
                         ?.let { addSystemProperty("awt.toolkit.name", it) }
@@ -244,6 +243,7 @@ class HunkRealDaemonE2eTest {
                     addSystemProperty("hunk.executable", executable.toString())
                     addSystemProperty("hunk.diagnostics", "true")
                     withEnv("XDG_CONFIG_HOME", configHome.toString())
+                    hunkTestEnvironment(configHome).forEach { (name, value) -> withEnv(name, value) }
                     System.getProperty("hunk.uiToolkit")
                         ?.takeIf(String::isNotBlank)
                         ?.let { addSystemProperty("awt.toolkit.name", it) }
@@ -483,27 +483,29 @@ class HunkRealDaemonE2eTest {
         configHome: Path,
         output: Path,
     ): RunningReview {
-        val process = PtyCommandLine(listOf(executable.toString(), "diff", "--watch"))
-            .withConsoleMode(false)
-            .withInitialColumns(160)
-            .withInitialRows(50)
-            .withWorkingDirectory(project)
-            .withRedirectErrorStream(true)
-            .withEnvironment("HUNK_MCP_HOST", "127.0.0.1")
-            .withEnvironment("HUNK_MCP_PORT", port.toString())
-            .withEnvironment("XDG_CONFIG_HOME", configHome.toString())
-            .withEnvironment("TERM", "xterm-256color")
-            .createProcess()
-        val log = output.resolve("real-external-review.log")
+        // PtyCommandLine needs a live IntelliJ Application. In the host test JVM it silently
+        // falls back to ordinary pipes, which stock v0.23 correctly rejects for --watch.
+        val process = PtyProcessBuilder(arrayOf(executable.toString(), "diff", "--watch"))
+            .setConsole(false)
+            .setInitialColumns(160)
+            .setInitialRows(50)
+            .setDirectory(project.toString())
+            .setRedirectErrorStream(true)
+            .setEnvironment(System.getenv() + mapOf(
+                "HUNK_MCP_HOST" to "127.0.0.1", "HUNK_MCP_PORT" to port.toString(),
+                "XDG_CONFIG_HOME" to configHome.toString(), "XDG_RUNTIME_DIR" to configHome.toString(),
+                "TERM" to "xterm-256color",
+            ))
+            .start()
         Thread.ofVirtual().name("real-hunk-external-review-output").start {
             process.inputStream.use { input ->
-                Files.newOutputStream(log).use(input::transferTo)
+                input.transferTo(java.io.OutputStream.nullOutputStream())
             }
         }
 
         return try {
             val sessionId = awaitValue("independent upstream TUI registration", 20.seconds) {
-                check(process.isAlive) { "Independent Hunk review exited: ${readLog(log)}" }
+                check(process.isAlive) { "Independent Hunk review exited with status ${process.exitValue()} (terminal content omitted)" }
                 sessions(port)
                     .singleOrNull { session ->
                         session.textProperty("repoRoot") == project.toString() &&
@@ -522,6 +524,7 @@ class HunkRealDaemonE2eTest {
         var lastFailure: Exception? = null
         repeat(3) { attempt ->
             val port = reservePort()
+            transports[port] = HunkSessionTransport(configHome.resolve("hunk-mcp/security-v1"))
             val log = output.resolve("real-daemon-${attempt + 1}.log")
             val process = ProcessBuilder(executable.toString(), "daemon", "serve")
                 .redirectErrorStream(true)
@@ -530,6 +533,7 @@ class HunkRealDaemonE2eTest {
                     environment()["HUNK_MCP_HOST"] = "127.0.0.1"
                     environment()["HUNK_MCP_PORT"] = port.toString()
                     environment()["XDG_CONFIG_HOME"] = configHome.toString()
+                    environment()["XDG_RUNTIME_DIR"] = configHome.toString()
                 }
                 .start()
             try {
@@ -579,26 +583,16 @@ class HunkRealDaemonE2eTest {
             .orEmpty()
 
     private fun get(port: Int, path: String): JsonObject {
-        val request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port$path"))
-            .timeout(Duration.ofSeconds(3))
-            .GET()
-            .build()
-        return send(request)
+        return checked(transports.getValue(port).get(URI.create("http://127.0.0.1:$port$path"), Duration.ofSeconds(3)))
     }
 
     private fun post(port: Int, body: JsonObject): JsonObject {
-        val request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port/session-api"))
-            .timeout(Duration.ofSeconds(15))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-            .build()
-        return send(request)
+        return checked(transports.getValue(port).post(URI.create("http://127.0.0.1:$port/session-api"), body, Duration.ofSeconds(15)))
     }
 
-    private fun send(request: HttpRequest): JsonObject {
-        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    private fun checked(response: HunkSessionTransport.Response): JsonObject {
         check(response.statusCode() in 200..299) {
-            "Hunk returned ${response.statusCode()}: ${response.body()}"
+            "Hunk returned HTTP ${response.statusCode()} (response body omitted)"
         }
         return JsonParser.parseString(response.body()).asJsonObject
     }
@@ -634,6 +628,7 @@ class HunkRealDaemonE2eTest {
                 environment()["HUNK_MCP_HOST"] = "127.0.0.1"
                 environment()["HUNK_MCP_PORT"] = port.toString()
                 environment()["XDG_CONFIG_HOME"] = configHome.toString()
+                environment()["XDG_RUNTIME_DIR"] = configHome.toString()
             }
             .start()
         val output = process.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
@@ -660,7 +655,8 @@ class HunkRealDaemonE2eTest {
 
     private fun stopTree(process: Process?) {
         if (process == null) return
-        val descendants = process.toHandle().descendants().toList().asReversed()
+        val descendants = ProcessHandle.of(process.pid()).orElse(null)
+            ?.descendants()?.use { it.toList().asReversed() }.orEmpty()
         descendants.forEach { it.destroy() }
         process.destroy()
         if (!process.waitFor(3, TimeUnit.SECONDS)) {
@@ -675,6 +671,7 @@ class HunkRealDaemonE2eTest {
     private fun stopDaemon(daemon: RunningDaemon?) {
         daemon?.keepAlive?.shutdownNow()
         stopTree(daemon?.process)
+        daemon?.let { transports.remove(it.port)?.close() }
     }
 
     private fun reservePort(): Int = ServerSocket(0).use { it.localPort }
@@ -711,7 +708,7 @@ class HunkRealDaemonE2eTest {
 
     private companion object {
         const val DAEMON_KEEPALIVE_SECONDS = 15L
-        val client: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
+        val transports = java.util.concurrent.ConcurrentHashMap<Int, HunkSessionTransport>()
         const val REVIEW_COMMENT = "Persist this reviewer comment in the live Hunk session."
         const val WRAPPED_MARKDOWN_COMMENT =
             "**Keep this sequential reviewer comment intact even when the off-screen terminal " +

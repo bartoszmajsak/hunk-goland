@@ -53,6 +53,16 @@ class PublicationGuardsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "did not pass"):
             ci.test_results(self.root, self.since)
 
+    def test_native_evidence_requires_successful_current_upstream_version(self):
+        ci.check_native_evidence({"status": "passed", "hunkVersion": "0.23.0"}, "fixture")
+        for status, version in (("passed", "0.20.0"), ("failed", "0.23.0"), ("passed", "0.22.0")):
+            with self.subTest(status=status, version=version), self.assertRaisesRegex(ValueError, "pinned version"):
+                ci.check_native_evidence({"status": status, "hunkVersion": version}, "fixture")
+
+    def test_installer_and_release_guard_pin_same_version(self):
+        installer = (Path(__file__).resolve().parents[1] / "install-ci-hunk").read_text()
+        self.assertIn(f"hunk_version={ci.HUNK_VERSION}\n", installer)
+
     def test_newly_copied_old_test_results_are_rejected(self):
         self.junit(timestamp=(self.since - timedelta(days=1)).isoformat())
         with self.assertRaisesRegex(ValueError, "Stale test run"):

@@ -19,9 +19,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -46,15 +43,14 @@ public final class HunkReviewLauncher implements Disposable {
     private static final int TERMINAL_ROWS = 50;
 
     private final Project project;
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(HTTP_TIMEOUT)
-            .build();
+    private final HunkSessionTransport transport;
     private final Object lifecycleLock = new Object();
     private ManagedReview active;
     private boolean disposed;
 
     public HunkReviewLauncher(Project project) {
         this.project = project;
+        transport = project.getService(HunkSessionTransport.class);
     }
 
     /**
@@ -381,14 +377,8 @@ public final class HunkReviewLauncher implements Disposable {
         var payload = new JsonObject();
         payload.addProperty("action", "list");
         var settings = HunkSettings.getInstance().getState();
-        var request = HttpRequest.newBuilder(origin(settings.host, settings.port).resolve("/session-api"))
-                .timeout(HTTP_TIMEOUT)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
-                .build();
         try {
-            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = transport.post(origin(settings.host, settings.port).resolve("/session-api"), payload, HTTP_TIMEOUT);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new HunkSessionException("Could not inspect active Hunk reviews.");
             }

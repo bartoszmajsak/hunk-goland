@@ -23,7 +23,11 @@ val localIde = providers.gradleProperty("platformPath")
 val platformVersion = providers.gradleProperty("platformVersion")
 
 sourceSets {
+    test {
+        java.srcDir("src/testSupport/java")
+    }
     create("integrationTest") {
+        java.srcDir("src/testSupport/java")
         compileClasspath += sourceSets.main.get().output
         runtimeClasspath += sourceSets.main.get().output
     }
@@ -31,6 +35,7 @@ sourceSets {
 
 dependencies {
     implementation("org.commonmark:commonmark:0.30.0")
+    implementation("io.github.erdtman:java-json-canonicalization:1.1")
 
     intellijPlatform {
         pluginVerifier("1.410")

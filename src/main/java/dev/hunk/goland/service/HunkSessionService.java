@@ -18,9 +18,6 @@ import dev.hunk.goland.settings.HunkSettings;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -51,9 +48,7 @@ public final class HunkSessionService {
     private static final String REMOVE_COMMENT = "comment-rm";
     private static final AtomicLong REQUEST_SEQUENCE = new AtomicLong();
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    private final HunkSessionTransport transport;
     private final HunkReviewLauncher launcher;
     private final HunkReviewRecovery recovery;
     private final Object recoveryLock = new Object();
@@ -62,6 +57,7 @@ public final class HunkSessionService {
     private final Map<String, VerifiedFingerprint> verifiedFingerprints = new HashMap<>();
 
     public HunkSessionService(Project project) {
+        transport = project.getService(HunkSessionTransport.class);
         launcher = project.getService(HunkReviewLauncher.class);
         recovery = project.getService(HunkReviewRecovery.class);
     }
@@ -625,7 +621,28 @@ public final class HunkSessionService {
         request.add("selector", selector(target));
         request.addProperty("includeNotes", true);
 
-        var response = responseObject(post(origin.resolve("/session-api"), request), "review");
+        final JsonObject response;
+        try {
+            response = responseObject(post(origin.resolve("/session-api"), request), "review");
+        } catch (HunkSessionException error) {
+            // The authenticated v0.23 broker deliberately hides selector-resolution errors.
+            // Recover actionable absence/ambiguity from its authorized list, not from guesses
+            // about a generic protocol-validation-failed response.
+            if (error.getMessage().equals("protocol-validation-failed")
+                    && request.getAsJsonObject("selector").has("repoRoot")) {
+                var list = new JsonObject();
+                list.addProperty("action", "list");
+                var sessions = responseObject(post(origin.resolve("/session-api"), list), "list")
+                        .getAsJsonArray("sessions");
+                var matching = sessions == null ? 0 : sessions.asList().stream()
+                        .filter(JsonElement::isJsonObject).map(JsonElement::getAsJsonObject)
+                        .filter(session -> target.repositoryRoot().toString().equals(string(session, "repoRoot")))
+                        .count();
+                if (matching == 0) throw new HunkSessionException("No active session matches repoRoot " + target.repositoryRoot());
+                if (matching > 1) throw new HunkSessionException("Multiple active sessions match repoRoot " + target.repositoryRoot());
+            }
+            throw error;
+        }
         var review = response.getAsJsonObject("review");
         if (review == null) {
             throw new HunkSessionException("Hunk's review response did not contain a review.");
@@ -830,55 +847,50 @@ public final class HunkSessionService {
                 : Optional.empty();
     }
 
-    private HttpResponse<String> get(URI uri) throws HunkSessionException {
-        return send(HttpRequest.newBuilder(uri)
-                .timeout(TIMEOUT)
-                .header("Accept", "application/json")
-                .GET()
-                .build(), "capabilities", "none");
+    private HunkSessionTransport.Response get(URI uri) throws HunkSessionException {
+        return send(uri, null, "capabilities", "none");
     }
 
-    private HttpResponse<String> post(URI uri, JsonObject payload) throws HunkSessionException {
-        return send(HttpRequest.newBuilder(uri)
-                .timeout(TIMEOUT)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
-                .build(), diagnosticProperty(payload, "action"), selectorKind(payload));
+    private HunkSessionTransport.Response post(URI uri, JsonObject payload) throws HunkSessionException {
+        return send(uri, payload, diagnosticProperty(payload, "action"), selectorKind(payload));
     }
 
-    private HttpResponse<String> send(
-            HttpRequest request,
+    private HunkSessionTransport.Response send(
+            URI uri,
+            JsonObject payload,
             String action,
             String selector
     ) throws HunkSessionException {
         var requestId = REQUEST_SEQUENCE.incrementAndGet();
         var startedAt = System.nanoTime();
         HunkDiagnostics.info(LOG, "http-start", () -> "requestId=" + requestId
-                + " method=" + request.method()
-                + " path=" + request.uri().getPath()
+                + " method=" + (payload == null ? "GET" : "POST")
+                + " path=" + uri.getPath()
                 + " action=" + action
                 + " selector=" + selector);
-        final HttpResponse<String> response;
+        final HunkSessionTransport.Response response;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            response = payload == null ? transport.get(uri, TIMEOUT) : transport.post(uri, payload, TIMEOUT);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
-            logHttpFailure(requestId, request, action, selector, startedAt, error);
+            logHttpFailure(requestId, uri, action, selector, startedAt, error);
             throw new HunkSessionException("Interrupted while contacting the Hunk session daemon.", error);
+        } catch (HunkAuthenticationException error) {
+            logHttpFailure(requestId, uri, action, selector, startedAt, error);
+            // An unsafe identity or protocol mismatch must not trigger an automatic TUI launch.
+            throw new HunkSessionException(error.getMessage(), error);
         } catch (IOException error) {
-            logHttpFailure(requestId, request, action, selector, startedAt, error);
-            var uri = request.uri();
+            logHttpFailure(requestId, uri, action, selector, startedAt, error);
             throw new HunkSessionException(
                     "Could not reach the Hunk session daemon at " + uri.getScheme() + "://" + uri.getAuthority()
-                            + ". Open a Hunk review or run `hunk daemon serve`, then retry.",
+                            + ". " + error.getMessage(),
                     error
             );
         }
 
         HunkDiagnostics.info(LOG, "http-complete", () -> "requestId=" + requestId
-                + " method=" + request.method()
-                + " path=" + request.uri().getPath()
+                + " method=" + (payload == null ? "GET" : "POST")
+                + " path=" + uri.getPath()
                 + " action=" + action
                 + " selector=" + selector
                 + " status=" + response.statusCode()
@@ -893,15 +905,14 @@ public final class HunkSessionService {
 
     private void logHttpFailure(
             long requestId,
-            HttpRequest request,
+            URI uri,
             String action,
             String selector,
             long startedAt,
             Exception error
     ) {
         HunkDiagnostics.warning(LOG, "http-failed", () -> "requestId=" + requestId
-                + " method=" + request.method()
-                + " path=" + request.uri().getPath()
+                + " path=" + uri.getPath()
                 + " action=" + action
                 + " selector=" + selector
                 + " errorType=" + error.getClass().getSimpleName()
@@ -936,7 +947,7 @@ public final class HunkSessionService {
         return "unknown";
     }
 
-    private static JsonObject responseObject(HttpResponse<String> response, String kind)
+    private static JsonObject responseObject(HunkSessionTransport.Response response, String kind)
             throws HunkSessionException {
         try {
             return JsonParser.parseString(response.body()).getAsJsonObject();

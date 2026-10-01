@@ -13,6 +13,11 @@ research under `docs/`; the local journal is not required to build or test.
   `/session-api` `comment-add` for it because that creates `source: "agent"`.
 - Do not invent Hunk actions, envelopes, actor kinds, capabilities, or persistence semantics. Check
   the installed/upstream source and document the exact supported contract.
+- Hunk 0.23.0 requires signed caller authentication even for capabilities and session discovery.
+  Use the shared `HunkSessionTransport`: owner-private local credentials, verified daemon hello,
+  Ed25519 request signatures, and verified bounded responses. No anonymous fallback or manual token.
+  The running daemon must match app revision 16. Tests must isolate the credential runtime directory
+  and preserve Wayland connectivity with an absolute `WAYLAND_DISPLAY` socket path.
 - Current stock Hunk reviewer creation uses the native TUI composer through a plugin-owned off-screen
   PTY. Keep that seam narrow: use `/session-api` for discovery, navigation, reading, exact
   verification, and deletion.
@@ -36,8 +41,9 @@ research under `docs/`; the local journal is not required to build or test.
 - `hunk session list`'s `comments:` field is `liveCommentCount` for agent annotations, not the
   reviewer-note count. Inspect `reviewNotes` with `hunk session review <id> --include-notes` and
   classify individual entries by `source`; `reviewNoteCount` includes agent entries when present.
-- Saved reviewer-note deletion is supported; editing is not. `editable: true` does not imply an edit
-  action.
+- Saved reviewer-note deletion is supported by the session CLI/API; editing is not exposed through
+  that integration. Hunk 0.23's own review UI has additional edit/reply actions, but `editable: true`
+  alone does not authorize a new plugin API or infer access to its protected review surface.
 - Reviewer anchors are single-line targets inside published Hunk hunks. Multiline Markdown bodies are
   valid, but a multi-line code selection resolves to one line.
 - Diff composition is current/right (`new`) side only. Support changed and contextual lines inside a
@@ -82,6 +88,9 @@ research under `docs/`; the local journal is not required to build or test.
   `scripts/run-ui-tests`; keep Xvfb working for GitHub Actions and Weston for headless Wayland.
 - Serialize Driver suites: isolated IDE profiles still share Starter's default remote port 10500.
   Preserve Gradle task ordering and sequential CI calls to prevent port collisions.
+- Outside the IDE, use `PtyProcessBuilder` for a real test TUI. `PtyCommandLine` needs an IntelliJ
+  Application and can silently fall back to pipes in the host test JVM; Hunk 0.23 rejects that for
+  `--watch`. For cleanup obtain a `ProcessHandle` from `pid()`, not pty4j's unsupported `toHandle()`.
 - Do not use `Thread.sleep` or fixed-delay synchronization. Use Awaitility/condition waits, AssertJ,
   and domain-specific assertions with actionable failure messages.
 - `test` and `integrationTest` cover logic and visual interaction. Any claim about native Hunk

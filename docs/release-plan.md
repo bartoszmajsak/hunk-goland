@@ -15,7 +15,7 @@ tracked contributor instructions and integration research. Initial release notes
 ## 2. Complete verification CI
 
 `.github/workflows/verify.yml` calls a shared pipeline that runs unit tests, builds the ZIP, runs Plugin Verifier,
-drives real GoLand under Xvfb, and verifies an unmodified checksum-pinned Hunk 0.20.0. Actions are
+drives real GoLand under Xvfb, and verifies an unmodified checksum-pinned Hunk 0.23.0. Actions are
 SHA-pinned, permissions default to read-only, Gradle and exact-version IDE download caching are
 enabled, and Dependabot covers GitHub Actions and Gradle. Dependency artifacts/metadata, the Gradle
 distribution, and upstream Hunk downloads have checksum verification. Workflow linting and

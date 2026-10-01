@@ -9,11 +9,17 @@ ZIP does not contain the Hunk executable.
 - GoLand 2026.2 or later within the verified compatibility range. The development build has been
   verified against GoLand builds `262.9437.286` and `263.5701.47`.
 - Upstream [Hunk](https://github.com/modem-dev/hunk). This plugin's native review integration has
-  been tested against **Hunk 0.20.0**. Compatibility with later versions is not guaranteed.
+  been tested against **Hunk 0.23.0**. Compatibility with other versions is not guaranteed.
 - Git and a local Git-backed project containing changes or a branch/revision comparison to review.
 
 The automated desktop and native Hunk tests currently run on Linux. Hunk's own platform support
 does not establish that this plugin has been tested on every supported operating system.
+
+Local authentication is automatic. Run Hunk and GoLand as the same OS user, with the same
+`XDG_RUNTIME_DIR` (or the same home-directory fallback). Hunk creates its owner-private credentials;
+the plugin reads them and authenticates requests without a manual token or pairing step. The
+installed Hunk executable and the running daemon must both be 0.23.0. An already-running daemon
+does not update when the executable is replaced; restart it using your normal service management.
 
 You do not need Bun, Node.js, or a separate JDK when using Hunk's standalone binary and installing
 the plugin ZIP. A JDK is needed only to build the plugin from source.
@@ -31,7 +37,7 @@ command -v hunk
 
 The installer normally places Hunk under `~/.hunk`. It may install a newer release than this
 plugin's tested version; use upstream's release installation/update instructions if you need the
-tested **0.20.0** version. Keep the absolute executable path reported by `command -v hunk` for the
+tested **0.23.0** version. Keep the absolute executable path reported by `command -v hunk` for the
 GoLand setting below. An IDE launched from a desktop menu may have a different `PATH` from your
 terminal.
 
@@ -91,7 +97,7 @@ published into that Hunk session appear as agent cards. Live external changes no
 the next two-second refresh; the pane also has a **Refresh** action.
 
 Reviewer notes can be deleted using their trash action and inline confirmation. Editing a saved
-reviewer note is not supported by the tested Hunk version. Comments target one source line; a
+reviewer note is not supported by this plugin's session-API integration. Comments target one source line; a
 multi-line selection does not create a code-range comment.
 
 ## Sessions and restarts
@@ -146,7 +152,8 @@ Install the resulting ZIP as described above. Building the plugin does not insta
 | Review does not match this comparison | Reopen the intended GoLand comparison, leave **Preferred session ID** empty, and retry the matching IDE-managed review. |
 | A line cannot be commented on | Check that it is on the current/right side and inside a published Hunk hunk. Fixed revision comparisons must be reviewed in their diff. |
 | Submission timed out | Inspect the live session with `hunk session review <id> --include-notes` before retrying, to check whether it already contains the comment. Enable diagnostics to capture the failed stage. |
-| Session list says `comments: 0` | Inspect the session with `--include-notes`; that list counter does not count reviewer notes in Hunk 0.20.0. |
+| Session list says `comments: 0` | Inspect the session with `--include-notes`; that list counter does not count reviewer notes in Hunk 0.23.0. |
+| Local authentication fails | Confirm the executable and running daemon are both 0.23.0, use the same OS user/runtime directory, and check ownership and private permissions of Hunk's `security-v1` directory. Do not make credential files world-readable. |
 | A plugin update has no effect | Reinstall the new ZIP and accept GoLand's reload/restart prompt. |
 
 For runtime failures, enable **Settings | Tools | Hunk Session | Enable diagnostic logging**,

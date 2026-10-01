@@ -90,7 +90,7 @@ history until the agent publishes them again.
 
 - GoLand 2026.2 (`262.*`).
 - Upstream Hunk, installed separately and available as `hunk` on `PATH` or configured explicitly.
-  The tested upstream version is **0.20.0**; newer versions require compatibility verification.
+  The tested upstream version is **0.23.0**; other versions require compatibility verification.
 - Git available to GoLand, and a Git-backed project with changes to review.
 - JDK 25 only when building from source; installing the plugin ZIP does not require a separate JDK.
 
@@ -102,6 +102,10 @@ hunk --version
 ```
 
 This project always targets upstream `modem-dev/hunk`; no companion Hunk fork is used.
+Local API authentication is automatic using Hunk's owner-private caller credentials. Run GoLand
+and Hunk as the same OS user, with the same `XDG_RUNTIME_DIR` (or home-directory fallback), and
+ensure the running daemon also uses 0.23.0. No manual token or additional runtime is needed.
+See the [0.23 authentication contract](docs/hunk-0.23-authentication.md).
 
 ## How to install
 
@@ -132,7 +136,7 @@ Each live Hunk TUI registers a random session ID, working directory, process ID,
 root with the daemon. GoLand resolves the file's VCS root and normally lets Hunk select the matching
 live registration. Use `hunk session list` to inspect registrations.
 
-In upstream Hunk 0.20, the `comments:` value printed by `hunk session list` is the legacy live agent
+In upstream Hunk 0.23, the `comments:` value printed by `hunk session list` is the legacy live agent
 annotation count, not the number of saved reviewer notes. A session can therefore correctly show
 `comments: 0` while containing GoLand reviewer comments. Inspect both kinds with:
 

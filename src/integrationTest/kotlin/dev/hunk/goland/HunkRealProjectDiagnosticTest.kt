@@ -17,9 +17,10 @@ import com.intellij.ide.starter.runner.Starter
 import org.assertj.core.api.SoftAssertions.assertSoftly
 import org.junit.jupiter.api.Test
 import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import dev.hunk.goland.service.HunkSessionTransport
+import java.time.Duration
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -110,6 +111,7 @@ private interface TraceUserDataHolderRef {
  * its complete diagnostics and then fails if either exact gutter target did not become writable.
  */
 class HunkRealProjectDiagnosticTest {
+    private val transport = HunkSessionTransport()
     @Test
     fun `traces compare with master in the real KServe worktree`() {
         val project = requiredPath("hunk.realProject")
@@ -482,16 +484,18 @@ class HunkRealProjectDiagnosticTest {
     }
 
     private fun daemonSessions(): String {
-        val request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:47657/session-api"))
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("{\"action\":\"list\"}"))
-            .build()
         return runCatching {
-            HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString()).let {
-                "status=${it.statusCode()} body=${it.body()}"
+            val payload = JsonObject().apply { addProperty("action", "list") }
+            transport.post(URI.create("http://127.0.0.1:47657/session-api"), payload, Duration.ofSeconds(3)).let {
+                val sessions = JsonParser.parseString(it.body()).asJsonObject.getAsJsonArray("sessions")
+                val summaries = sessions?.map { value ->
+                    val session = value.asJsonObject
+                    listOf("sessionId", "pid", "repoRoot", "fileCount", "liveCommentCount", "reviewNoteCount")
+                        .joinToString(" ") { name -> "$name=${session.get(name) ?: "none"}" }
+                }.orEmpty()
+                "status=${it.statusCode()} sessions=$summaries"
             }
-        }.getOrElse { "unavailable=${it::class.qualifiedName}: ${it.message}" }
+        }.getOrElse { "unavailable=${it::class.qualifiedName} (payload omitted)" }
     }
 
     private fun processSnapshot(project: Path): String = buildString {

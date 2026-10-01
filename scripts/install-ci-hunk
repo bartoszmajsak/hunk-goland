@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-hunk_version=0.20.0
-hunk_sha256=3c1a36767a77675133a25ea7a7fded4c11788ce923407f6bf3608f20c06cf0bb
+hunk_version=0.23.0
+hunk_sha256=79ab6406cbb2b800e73c6fbc2546afb97ed4fbc3b50aad072eb9ad12151581e6
 extract_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/hunk-ci.XXXXXX")"
 archive="$extract_dir/hunkdiff-linux-x64.tar.gz"
 curl --proto '=https' --proto-redir '=https' --fail --silent --show-error \

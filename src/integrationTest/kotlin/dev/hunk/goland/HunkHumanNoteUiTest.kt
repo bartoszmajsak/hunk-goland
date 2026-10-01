@@ -27,7 +27,7 @@ class HunkReviewCommentUiTest {
         var status = "failed"
 
         try {
-            FakeHunkDaemon.start(TEST_AUTHOR).use { daemon ->
+            FakeHunkDaemon.start(TEST_AUTHOR, temporaryDirectory.resolve("runtime")).use { daemon ->
                 daemon.connectExternalReview(project)
                 val pluginPath = Path.of(System.getProperty("path.to.build.plugin"))
                 val context = Starter.newContext(
@@ -39,6 +39,7 @@ class HunkReviewCommentUiTest {
                     applyVMOptionsPatch {
                         addSystemProperty("hunk.session.port", daemon.port)
                         addSystemProperty("hunk.diagnostics", "true")
+                        hunkTestEnvironment(daemon.runtimeDirectory).forEach { (name, value) -> withEnv(name, value) }
                         withEnv(
                             "PATH",
                             "${fakeHunk.binDirectory}${File.pathSeparator}${System.getenv("PATH")}",
@@ -477,7 +478,7 @@ class HunkReviewCommentUiTest {
         val fakeHunk = installFakeHunk(temporaryDirectory)
         val ux = UxReport.configuredSubreport("cross-view")
 
-        FakeHunkDaemon.start(TEST_AUTHOR).use { daemon ->
+        FakeHunkDaemon.start(TEST_AUTHOR, temporaryDirectory.resolve("runtime")).use { daemon ->
             Starter.newContext(
                 "hunk-compare-with-current-${System.nanoTime()}",
                 goLandTestCase(project),
@@ -488,6 +489,7 @@ class HunkReviewCommentUiTest {
                 applyVMOptionsPatch {
                     addSystemProperty("hunk.session.port", daemon.port)
                     addSystemProperty("hunk.diagnostics", "true")
+                    hunkTestEnvironment(daemon.runtimeDirectory).forEach { (name, value) -> withEnv(name, value) }
                     withEnv(
                         "PATH",
                         "${fakeHunk.binDirectory}${File.pathSeparator}${System.getenv("PATH")}",

@@ -16,6 +16,7 @@ from zipfile import ZipFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HUNK_VERSION = "0.23.0"
 
 
 def require(condition, message):
@@ -99,6 +100,11 @@ def check_pins():
                         f"Action needs a full SHA and release comment: {workflow.name}: {line}")
 
 
+def check_native_evidence(evidence, name):
+    require(evidence.get("status") == "passed" and evidence.get("hunkVersion") == HUNK_VERSION,
+            f"Native Hunk evidence is not successful for the pinned version: {name}")
+
+
 def package(since, tag):
     version, ide = versions()
     check_tag(version, tag)
@@ -111,8 +117,7 @@ def package(since, tag):
         path = native / name
         fresh_file(path, since)
         evidence = json.loads(path.read_text())
-        require(evidence.get("status") == "passed" and evidence.get("hunkVersion") == "0.20.0",
-                f"Native Hunk evidence is not successful for the pinned version: {name}")
+        check_native_evidence(evidence, name)
     bundle = ROOT / f"build/distributions/hunk-goland-{version}.zip"
     fresh_file(bundle, since)
     require(bundle_version(bundle) == version, "Embedded bundle version does not match sources")
@@ -130,7 +135,7 @@ def package(since, tag):
     require(notes.is_file(), f"Missing release notes: {notes}")
     shutil.copyfile(notes, output / "release-notes.md")
     artifacts = {path.name: digest(path) for path in sorted(output.iterdir())}
-    manifest = {"pluginVersion": version, "ideVersion": ide, "hunkVersion": "0.20.0",
+    manifest = {"pluginVersion": version, "ideVersion": ide, "hunkVersion": HUNK_VERSION,
                 "sourceCommit": commit, "testResults": results, "artifacts": artifacts,
                 "verifiedAt": datetime.now(timezone.utc).isoformat(),
                 "runUrl": f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"

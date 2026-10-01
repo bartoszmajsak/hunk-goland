@@ -5,6 +5,11 @@ Source of truth: `/home/bartek/code/oss/hunk` at commit
 audit. This note describes only APIs and behavior present at that commit. It does
 not use or assume the `hunk-goland-hunk` fork.
 
+The detailed API audit below is historical and remains scoped to that commit. The current plugin
+and release gates target stock **0.23.0**, whose signed caller authentication is documented in
+[the migration contract](hunk-0.23-authentication.md). Do not apply the old unsigned transport
+assumptions to that release.
+
 ## Verdict
 
 The current upstream implementation supports the shipped real-daemon E2E with
@@ -24,7 +29,7 @@ It **cannot honestly prove that upstream currently
 accepts the text of a GoLand reviewer comment through HTTP**. The PTY relay is the
 temporary bridge for that one missing operation.
 
-The implemented `realHunkE2e` task uses the installed unmodified upstream 0.20.0
+The implemented `realHunkE2e` task now uses the installed unmodified upstream 0.23.0
 binary, an isolated daemon port, a generated Git repository, an IDE-owned PTY,
 and Awaitility waits. It requires neither a source checkout nor a capability
 preload. Machine-readable evidence is `build/reports/ux/real-daemon-e2e.json`.
@@ -412,9 +417,9 @@ process exits.
 
 Accurate:
 
-> The real-upstream E2E launches an unmodified upstream Hunk 0.20.0 binary. An
+> The real-upstream E2E launches an unmodified upstream Hunk 0.23.0 binary. An
 > IDE-owned PTY relays the GoLand reviewer comment through Hunk's native TUI
-> composer because this upstream wire version cannot carry draft text. The test
+> composer rather than using the agent-provenance session comment action. The test
 > then verifies the real session snapshot, native deletion, and an external
 > upstream agent comment reflected in the open GoLand thread.
 
