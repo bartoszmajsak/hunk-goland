@@ -18,8 +18,11 @@ does not establish that this plugin has been tested on every supported operating
 Local authentication is automatic. Run Hunk and GoLand as the same OS user, with the same
 `XDG_RUNTIME_DIR` (or the same home-directory fallback). Hunk creates its owner-private credentials;
 the plugin reads them and authenticates requests without a manual token or pairing step. The
-installed Hunk executable and the running daemon must both be 0.23.0. An already-running daemon
-does not update when the executable is replaced; restart it using your normal service management.
+installed Hunk executable and the running daemon must both be 0.23.0. Inspect `hunk daemon status`
+after an upgrade: replacing the executable does not update an already-running daemon. Save or copy
+important notes before deliberately running `hunk daemon restart` or restarting your daemon service.
+This can disconnect incompatible review windows and lose their in-memory notes. The local recovery
+cache is not a backup.
 
 You do not need Bun, Node.js, or a separate JDK when using Hunk's standalone binary and installing
 the plugin ZIP. A JDK is needed only to build the plugin from source.
@@ -97,8 +100,9 @@ published into that Hunk session appear as agent cards. Live external changes no
 the next two-second refresh; the pane also has a **Refresh** action.
 
 Reviewer notes can be deleted using their trash action and inline confirmation. Editing a saved
-reviewer note is not supported by this plugin's session-API integration. Comments target one source line; a
-multi-line selection does not create a code-range comment.
+reviewer note is not yet supported by this plugin, although stock Hunk supports saved-note editing.
+Comments currently target one source line; a multi-line selection does not create a code-range
+comment in GoLand. Stock Hunk also supports code ranges and semantic replies.
 
 ## Sessions and restarts
 

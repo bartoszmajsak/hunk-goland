@@ -4,8 +4,9 @@ Review a live Hunk changeset without leaving GoLand. The plugin shows Hunk revie
 responses on code lines, and lets you add genuine Hunk reviewer comments from normal editors and
 diff viewers.
 
-For the upstream integration contract and research, see
-[the upstream audit](docs/upstream-no-change-e2e.md) and [contributor instructions](AGENTS.md).
+For the current upstream integration contract and remaining gaps, see
+[the Hunk 0.23 audit](docs/research/hunk-0.23-gap-audit.md) and
+[contributor instructions](AGENTS.md).
 
 Start with the [user guide](docs/user-guide.md) for Hunk installation, plugin setup, reviewing,
 agent handoff, and troubleshooting. Hunk is a required external dependency, not bundled in the ZIP.
@@ -31,8 +32,8 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   **Tools | Show Hunk Review** to reveal it. Commented files also carry a blue Hunk badge in native
   VCS change trees. Thread and pane controls navigate previous/next in review order, display the
   active keymap shortcuts (defaults: `Ctrl+Alt+,` and `Ctrl+Alt+.`), and wrap across files.
-- **Native deletion:** editable reviewer notes are removed through Hunk's `comment-rm` action. Hunk
-  does not currently expose editing for a saved reviewer note.
+- **Native deletion:** editable reviewer notes are removed through Hunk's `comment-rm` action.
+  Saved-note editing exists in Hunk's TUI but is not yet exposed by this plugin.
 - **Two-way refresh:** notes added by another Hunk client appear in an open thread and in gutter
   markers within the two-second refresh interval. Unchanged refreshes do not rebuild the thread,
   and changed data preserves the message-scroll position.
@@ -49,13 +50,15 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   visible and writable from either view without launching a competing working-tree session.
 
 Reviewer comments are currently single-line anchors. Multiline Markdown bodies are supported, but a
-multi-line code selection uses its first line because Hunk's reviewer composer does not expose a
-multi-line target.
+multi-line code selection uses its first line. This is a plugin limitation: stock Hunk supports
+multiline code anchors and semantic replies.
 
 ## How it works
 
-Hunk 0.20.x does not expose a public HTTP operation that creates a reviewer note with draft text;
-`comment-add` intentionally creates an agent annotation. To preserve provenance, the plugin starts
+Hunk 0.23.0's ordinary session API does not expose reviewer composition; `comment-add` intentionally
+creates an agent annotation. Protected review actions support draft text, editing, and replies,
+but stock Hunk does not delegate their authorization capability to an external IDE.
+To preserve provenance, the plugin starts
 an unmodified Hunk TUI in an off-screen PTY that GoLand owns. It uses Hunk's native session API to
 navigate to the selected line, then drives the real `c` → body → `Ctrl+S` reviewer-composer path.
 Nothing is shown in GoLand's Terminal tool window.
@@ -106,6 +109,11 @@ Local API authentication is automatic using Hunk's owner-private caller credenti
 and Hunk as the same OS user, with the same `XDG_RUNTIME_DIR` (or home-directory fallback), and
 ensure the running daemon also uses 0.23.0. No manual token or additional runtime is needed.
 See the [0.23 authentication contract](docs/hunk-0.23-authentication.md).
+
+After upgrading Hunk, inspect `hunk daemon status`: replacing the executable does not upgrade an
+already-running daemon. Save or copy important review notes before deliberately running
+`hunk daemon restart` (or restarting your daemon service). A restart can disconnect incompatible
+review windows and lose their in-memory notes. GoLand's local recovery cache is not a backup.
 
 ## How to install
 
@@ -191,7 +199,8 @@ The same JetBrains Driver tests support three display adapters:
 ```
 
 `integrationTest` launches real GoLand against a generated, self-contained Go module and Git
-repository. It covers editor and diff actions, right-side-only comments, a line without an existing
+repository, using a signed fake daemon and fixture TUI. It verifies UI and transport behavior,
+not stock-Hunk storage or provenance. It covers editor and diff actions, right-side-only comments, a line without an existing
 thread, true unified-view line mapping, a submitted comment on a net-new file, Markdown,
 card/composer collapse and expansion, chronological ordering, stable message scrolling, the
 persistent review navigator, file indicators, cross-file next/previous navigation, deletion,
@@ -272,8 +281,8 @@ for repository setup, local checks, and first-release prerequisites.
 - Only loopback daemon hosts are accepted, matching Hunk's local-session security model.
 - Diff comments are intentionally right/new-side only.
 - Comments may target only lines contained in Hunk's published hunks.
-- Saved reviewer comments can be deleted but not edited because upstream Hunk has no saved-note edit
-  intent.
+- Saved reviewer comments can be deleted but not yet edited in GoLand. Stock Hunk has editing and
+  reply intents; their protected review API is not currently authorized for this plugin.
 - Recovery is local cache assistance, not upstream session persistence: recovered reviewer comments
   have new native IDs/timestamps, while recovered agent responses are read-only local history.
 - Push-driven SSE synchronization needs an upstream-supported way to delegate the protected review
