@@ -22,7 +22,8 @@ research under `docs/`; the local journal is not required to build or test.
   PTY. Keep that seam narrow: use `/session-api` for discovery, navigation, reading, exact
   verification, and deletion.
 - Report submission success only after a daemon snapshot contains a previously unseen reviewer note
-  matching the exact body, file, side, and line. A rendered terminal confirmation is not persistence
+  matching the exact body, file, side, and inclusive range, with root-note provenance. A rendered
+  terminal confirmation is not persistence
   evidence. Never write comment bodies, matching text fragments, terminal transcripts, request or
   response payloads, or capability tokens to logs or diagnostics.
 - Do not type into or claim to join an externally owned TUI. Read/delete may target an explicitly
@@ -35,6 +36,9 @@ research under `docs/`; the local journal is not required to build or test.
 - Local restart recovery is not native Hunk persistence. Replay reviewer comments only through the
   owned native composer, accept their new Hunk IDs/timestamps, and keep missing agent responses as
   explicitly labeled read-only local history. Never turn agent history into `source: "user"`.
+- Preserve native reply parent IDs. Missing reviewer replies also remain read-only local history;
+  never replay them as root comments. Remap a cached parent only after its exact native replay was
+  verified, not by matching text or line positions.
 - Guard recovery with the exact repository/comparison fingerprint, including resolved Git commits,
   Hunk hunk structure, and working-tree file contents. If the fingerprint is unavailable or stale,
   do not replay. Keep the cache non-roaming, bounded, and outside the repository.
@@ -44,6 +48,8 @@ research under `docs/`; the local journal is not required to build or test.
 - Saved reviewer-note deletion is supported by the session CLI/API; editing is not exposed through
   that integration. Hunk 0.23's own review UI has additional edit/reply actions, but `editable: true`
   alone does not authorize a new plugin API or infer access to its protected review surface.
+- Hunk refuses deletion of a saved note with live replies. Explain that restriction inline; local
+  history alone must not block native deletion.
 - Reviewer anchors may cover an inclusive source range inside one published Hunk hunk. Preserve both
   endpoints through editor/unified-diff mapping, exact daemon verification, and restart recovery.
   Gutter actions remain single-line targets, even when the editor has a selection elsewhere.
@@ -103,6 +109,8 @@ research under `docs/`; the local journal is not required to build or test.
   selective deletion.
 - Range gates must include a selection ending at the next line's exclusive start, native range
   creation amid existing note cards, exact CLI range read-back, and same-profile range recovery.
+- Reply gates must verify native parent IDs in live CLI snapshots, parent-deletion restrictions,
+  and local history attribution after a verified parent replay.
 - Keep the same-profile real-GoLand restart gate: the original managed TUI must exit, a fresh session
   must receive recovered reviewer comments as `source: "user"`, and agent history must remain local.
 - Keep `realProjectDiagnostic` as an optional but gating reproduction for the KServe **Compare with

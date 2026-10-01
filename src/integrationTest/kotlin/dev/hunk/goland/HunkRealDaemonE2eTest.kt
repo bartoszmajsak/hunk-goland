@@ -91,7 +91,7 @@ class HunkRealDaemonE2eTest {
                         ?.textProperty("sessionId")
                 }
                 ui.submitCommentWithButton(RECOVERY_REVIEW_COMMENT)
-                awaitValue("comment checkpoint before restart", 30.seconds) {
+                val originalReview = awaitValue("comment checkpoint before restart", 30.seconds) {
                     reviewNotes(port, originalSessionId).takeIf {
                         HunkReviewAssert.containsNote(it, RECOVERY_REVIEW_COMMENT)
                     }
@@ -104,9 +104,7 @@ class HunkRealDaemonE2eTest {
                     JsonObject().apply {
                         addProperty("action", "comment-add")
                         add("selector", sessionSelector(originalSessionId))
-                        addProperty("filePath", TestGoProject.MAIN_FILE)
-                        addProperty("side", "new")
-                        addProperty("line", TestGoProject.CHANGED_LINE)
+                        addProperty("replyTo", HunkReviewAssert.noteId(originalReview, RECOVERY_REVIEW_COMMENT))
                         addProperty("summary", RECOVERY_AGENT_NOTE)
                         addProperty("author", "restart-agent")
                         addProperty("reveal", false)
@@ -172,6 +170,10 @@ class HunkRealDaemonE2eTest {
                     frame.xx { byAccessibleName("Agent response recovered locally") }
                         .list()
                         .any { it.component.isShowing() }
+                }
+                awaitCondition("recovered reply points to the verified replayed parent") {
+                    frame.x { byAccessibleName("Reply to Hunk GoLand test") }
+                        .let { it.present() && it.component.isShowing() }
                 }
                 val reviewerY = ui.messageBodyY(
                     "Comment body",
@@ -393,8 +395,30 @@ class HunkRealDaemonE2eTest {
                         .any { it.htmlInIde().contains(AGENT_NOTE) }
                 }
 
+                val replyParentId = HunkReviewAssert.noteId(cliAfterReviewerComments, REVIEW_COMMENT)
+                post(port, JsonObject().apply {
+                    addProperty("action", "comment-add")
+                    add("selector", sessionSelector(managedSessionId))
+                    addProperty("replyTo", replyParentId)
+                    addProperty("summary", AGENT_REPLY)
+                    addProperty("author", "reply-agent")
+                    addProperty("reveal", false)
+                })
+                ui.closeThread(editor)
+                editor.goToPosition(TestGoProject.CHANGED_LINE, 2)
+                ui.openThread(editor)
+                awaitCondition("native semantic reply relationship in GoLand", 20.seconds) {
+                    frame.x { byAccessibleName("Reply to Hunk GoLand test") }
+                        .let { it.present() && it.component.isShowing() }
+                }
+                awaitCondition("parent deletion restriction is explained inline") {
+                    frame.x { byAccessibleName("Comment cannot be deleted while it has replies") }
+                        .let { it.present() && it.component.isShowing() }
+                }
+
                 val allNotes = reviewNotes(port, managedSessionId)
                 HunkReviewAssert.assertThat(allNotes)
+                    .hasAgentReply(AGENT_REPLY, replyParentId, TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(
                         WRAPPED_MARKDOWN_COMMENT,
@@ -412,9 +436,10 @@ class HunkRealDaemonE2eTest {
                     20.seconds,
                 ) {
                     liveSessionReview(executable, managedSessionId, port, configHome)
-                        .takeIf { review -> liveSessionCounts(review) == (1 to 5) }
+                        .takeIf { review -> liveSessionCounts(review) == (2 to 6) }
                 }
                 HunkReviewAssert.assertThat(cliBeforeDeletion)
+                    .hasAgentReply(AGENT_REPLY, replyParentId, TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(
                         WRAPPED_MARKDOWN_COMMENT,
@@ -428,6 +453,9 @@ class HunkRealDaemonE2eTest {
                     )
                     .hasAgentResponse(AGENT_NOTE, TestGoProject.UNCHANGED_HUNK_LINE)
 
+                ui.closeThread(editor)
+                editor.goToPosition(TestGoProject.UNCHANGED_HUNK_LINE, 2)
+                ui.openThread(editor)
                 frame.button { byAccessibleName("Delete review comment") }.doClickInIde()
                 awaitCondition("inline delete confirmation") {
                     frame.button { byAccessibleName("Confirm delete review comment") }.present()
@@ -452,9 +480,10 @@ class HunkRealDaemonE2eTest {
                     20.seconds,
                 ) {
                     liveSessionReview(executable, managedSessionId, port, configHome)
-                        .takeIf { review -> liveSessionCounts(review) == (1 to 4) }
+                        .takeIf { review -> liveSessionCounts(review) == (2 to 5) }
                 }
                 HunkReviewAssert.assertThat(cliAfterDeletion)
+                    .hasAgentReply(AGENT_REPLY, replyParentId, TestGoProject.CHANGED_LINE)
                     .hasReviewerRange(RANGE_COMMENT, TestGoProject.CHANGED_LINE, TestGoProject.UNCHANGED_HUNK_LINE)
                     .hasReviewerComment(REVIEW_COMMENT, "user", TestGoProject.CHANGED_LINE)
                     .hasReviewerComment(
@@ -740,6 +769,7 @@ class HunkRealDaemonE2eTest {
         const val AFTER_NAVIGATION_COMMENT =
             "A third reviewer comment still works after navigating to another hunk line."
         const val AGENT_NOTE = "External agent response arrived through the real Hunk daemon."
+        const val AGENT_REPLY = "A semantic agent reply retains the original reviewer parent."
         const val RECOVERY_REVIEW_COMMENT =
             "Restore this reviewer comment after GoLand replaces its Hunk process."
         const val RECOVERY_AGENT_NOTE =

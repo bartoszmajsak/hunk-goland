@@ -18,6 +18,13 @@ internal class HunkReviewAssert private constructor(actual: String) :
         hasNote(body = body, source = "agent", side = "new", line = line)
     }
 
+    fun hasAgentReply(body: String, parentId: String, line: Int) = apply {
+        hasAgentResponse(body, line)
+        if (notes.none { it.body() == body && it.string("parentId") == parentId }) {
+            failWithMessage("Expected native agent reply to parent <%s> for <%s>", parentId, body)
+        }
+    }
+
     fun hasReviewerRange(body: String, firstLine: Int, lastLine: Int) = apply {
         val matching = notes.filter { it.body() == body && it.string("source") == "user" }
         if (matching.none { note ->
@@ -73,6 +80,10 @@ internal class HunkReviewAssert private constructor(actual: String) :
 
         fun containsNote(actual: String, body: String): Boolean =
             parseNotes(actual).any { it.body() == body }
+
+        fun noteId(actual: String, body: String): String =
+            parseNotes(actual).single { it.body() == body }.string("noteId")
+                ?: throw AssertionError("Native note has no identity")
 
         private fun parseNotes(actual: String): List<JsonObject> = try {
             JsonParser.parseString(actual)

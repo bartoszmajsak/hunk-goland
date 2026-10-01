@@ -283,7 +283,9 @@ internal class HunkUiDriver(private val frame: UiComponent) {
         }
         if (requireExistingNotes) {
             awaitCondition("review comment card") {
-                frame.x { byAccessibleName("Comment body") }.present()
+                frame.xx { byAccessibleName("Comment body") }
+                    .list()
+                    .any { it.component.isShowing() }
             }
             awaitCondition("agent note card") {
                 frame.xx { byAccessibleName("Agent response body") }

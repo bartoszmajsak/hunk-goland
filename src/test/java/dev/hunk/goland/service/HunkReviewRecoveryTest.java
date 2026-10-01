@@ -12,10 +12,55 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HunkReviewRecoveryTest {
+    @Test
+    void preservesReviewerRepliesAsReadOnlyHistoryInsteadOfReplayingThemAsRootComments() {
+        var recovery = new HunkReviewRecovery(CLOCK);
+        var parent = reviewer("old-parent", "Question", 4);
+        var child = new HunkReviewNote("cmd/main.go",
+                reviewer("old-child", "Clarification", 4).note().withParent("old-parent"));
+        recovery.checkpoint(TARGET, "exact-diff", List.of(parent, child));
+        var reloaded = new HunkReviewRecovery(CLOCK);
+        reloaded.loadState(recovery.getState());
+        var plan = reloaded.plan(TARGET, "exact-diff", List.of());
+        assertThat(plan.reviewerComments()).containsExactly(parent);
+        assertThat(plan.localHistory()).singleElement().satisfies(reply -> {
+            assertThat(reply.note().source()).isEqualTo(HunkNoteSource.USER);
+            assertThat(reply.note().parentId()).isEqualTo("old-parent");
+            assertThat(reply.note().editable()).isFalse();
+            assertThat(reply.note().recovered()).isTrue();
+        });
+    }
+
+    @Test
+    void remapsReplyParentsOnlyAfterVerifiedNativeRootReplay() {
+        var recovery = new HunkReviewRecovery(CLOCK);
+        var reply = new HunkReviewNote("cmd/main.go", agent("agent-child", "Done", 4)
+                .note().withParent("old-parent"));
+        recovery.checkpoint(TARGET, "exact-diff", List.of(reply));
+        var plan = recovery.plan(TARGET, "exact-diff", List.of(), Map.of("old-parent", "new-parent"));
+        assertThat(plan.localHistory()).singleElement().satisfies(child ->
+                assertThat(child.note().parentId()).isEqualTo("new-parent"));
+        var republished = new HunkReviewNote("cmd/main.go", reply.note().withParent("new-parent"));
+        assertThat(recovery.plan(TARGET, "exact-diff", List.of(republished),
+                Map.of("old-parent", "new-parent")).localHistory()).isEmpty();
+    }
+
+    @Test
+    void doesNotConfuseRepliesWithRootsOrRepliesToDifferentParents() {
+        var recovery = new HunkReviewRecovery(CLOCK);
+        var reply = new HunkReviewNote("cmd/main.go", agent("child", "Done", 4).note().withParent("parent"));
+        recovery.checkpoint(TARGET, "exact-diff", List.of(reply));
+        assertThat(recovery.plan(TARGET, "exact-diff", List.of(agent("root", "Done", 4))).localHistory())
+                .hasSize(1);
+        assertThat(recovery.plan(TARGET, "exact-diff", List.of(new HunkReviewNote("cmd/main.go",
+                reply.note().withParent("different-parent")))).localHistory()).hasSize(1);
+    }
+
     @Test
     void preservesRangeAnchorsThroughCacheReloadAndSemanticDeduplication() {
         var recovery = new HunkReviewRecovery(CLOCK);
@@ -80,7 +125,7 @@ class HunkReviewRecoveryTest {
         assertThat(plan.reviewerComments())
                 .extracting(note -> note.note().body())
                 .containsExactly("Review this");
-        assertThat(plan.agentHistory()).singleElement().satisfies(note -> {
+        assertThat(plan.localHistory()).singleElement().satisfies(note -> {
             assertThat(note.note().body()).isEqualTo("Done");
             assertThat(note.note().recovered()).isTrue();
             assertThat(note.note().editable()).isFalse();
@@ -95,9 +140,9 @@ class HunkReviewRecoveryTest {
         recovery.checkpoint(TARGET, "exact-diff", List.of(cached));
 
         var plan = recovery.plan(TARGET, "exact-diff", List.of(live));
-        var merged = HunkReviewRecovery.mergeWithAgentHistory(List.of(live), plan.agentHistory());
+        var merged = HunkReviewRecovery.mergeWithLocalHistory(List.of(live), plan.localHistory());
 
-        assertThat(plan.agentHistory()).isEmpty();
+        assertThat(plan.localHistory()).isEmpty();
         assertThat(merged).containsExactly(live);
     }
 
@@ -112,7 +157,7 @@ class HunkReviewRecoveryTest {
         var plan = recovery.plan(TARGET, "new-diff", List.of());
 
         assertThat(plan.reviewerComments()).isEmpty();
-        assertThat(plan.agentHistory()).isEmpty();
+        assertThat(plan.localHistory()).isEmpty();
         assertThat(plan.staleNoteCount()).isEqualTo(2);
     }
 
@@ -129,7 +174,7 @@ class HunkReviewRecoveryTest {
         var plan = afterRestart.plan(TARGET, "exact-diff", List.of());
 
         assertThat(plan.reviewerComments()).isEmpty();
-        assertThat(plan.agentHistory()).isEmpty();
+        assertThat(plan.localHistory()).isEmpty();
         assertThat(plan.staleNoteCount()).isZero();
     }
 

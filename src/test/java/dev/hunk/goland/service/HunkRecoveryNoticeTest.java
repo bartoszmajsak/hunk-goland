@@ -21,7 +21,7 @@ class HunkRecoveryNoticeTest {
         );
 
         assertThat(HunkSessionService.recoveryNotice(plan)).isEqualTo(
-                "Restored 1 reviewer comment; showing 1 agent response from local history."
+                "Restored 1 reviewer comment; showing 1 review item from local history."
         );
     }
 

@@ -353,6 +353,7 @@ internal class FakeHunkDaemon private constructor(
             notes.add(
                 note(
                     id = "agent-external",
+                    parentId = "agent-context",
                     source = "agent",
                     side = "new",
                     line = 4,
@@ -446,6 +447,7 @@ internal class FakeHunkDaemon private constructor(
         createdAt: String,
         editable: Boolean,
         endLine: Int = line,
+        parentId: String? = null,
     ): JsonObject = JsonObject().apply {
         addProperty("noteId", id)
         addProperty("source", source)
@@ -453,6 +455,7 @@ internal class FakeHunkDaemon private constructor(
         addProperty("side", side)
         addProperty("line", line)
         addProperty("endLine", endLine)
+        parentId?.let { addProperty("parentId", it) }
         addProperty("body", body)
         addProperty("author", author)
         addProperty("createdAt", createdAt)

@@ -63,6 +63,15 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             String fingerprint,
             List<HunkReviewNote> liveNotes
     ) {
+        return plan(target, fingerprint, liveNotes, Map.of());
+    }
+
+    synchronized RecoveryPlan plan(
+            ReviewTarget target,
+            String fingerprint,
+            List<HunkReviewNote> liveNotes,
+            Map<String, String> restoredIds
+    ) {
         prune();
         var matching = data.reviews.stream()
                 .filter(review -> review.matches(target))
@@ -78,11 +87,15 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
 
         var remainingLive = semanticCounts(liveNotes);
         var reviewerComments = new ArrayList<HunkReviewNote>();
-        var agentHistory = new ArrayList<HunkReviewNote>();
+        var localHistory = new ArrayList<HunkReviewNote>();
         for (var stored : matching.get().safeNotes()) {
             final HunkReviewNote note;
             try {
-                note = stored.toModel(false);
+                var cached = stored.toModel(false);
+                var parentId = cached.note().parentId();
+                note = new HunkReviewNote(cached.filePath(), cached.note().withParent(
+                        parentId == null ? null : restoredIds.getOrDefault(parentId, parentId)
+                ));
             } catch (RuntimeException ignored) {
                 // A partially written or manually edited cache must never block the live review.
                 continue;
@@ -91,10 +104,10 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             var count = remainingLive.getOrDefault(key, 0);
             if (count > 0) {
                 remainingLive.put(key, count - 1);
-            } else if (note.note().source() == HunkNoteSource.USER) {
+            } else if (note.note().source() == HunkNoteSource.USER && note.note().parentId() == null) {
                 reviewerComments.add(note);
             } else {
-                agentHistory.add(new HunkReviewNote(
+                localHistory.add(new HunkReviewNote(
                         note.filePath(),
                         note.note().asRecoveredHistory()
                 ));
@@ -102,7 +115,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
         }
         return new RecoveryPlan(
                 List.copyOf(reviewerComments),
-                List.copyOf(agentHistory),
+                List.copyOf(localHistory),
                 0
         );
     }
@@ -130,13 +143,13 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
         }
     }
 
-    static List<HunkReviewNote> mergeWithAgentHistory(
+    static List<HunkReviewNote> mergeWithLocalHistory(
             List<HunkReviewNote> liveNotes,
-            List<HunkReviewNote> agentHistory
+            List<HunkReviewNote> localHistory
     ) {
         var remainingLive = semanticCounts(liveNotes);
         var result = new ArrayList<>(liveNotes);
-        for (var recovered : agentHistory) {
+        for (var recovered : localHistory) {
             var key = SemanticNote.from(recovered);
             var count = remainingLive.getOrDefault(key, 0);
             if (count > 0) {
@@ -162,7 +175,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
 
     record RecoveryPlan(
             List<HunkReviewNote> reviewerComments,
-            List<HunkReviewNote> agentHistory,
+            List<HunkReviewNote> localHistory,
             int staleNoteCount
     ) {
     }
@@ -174,7 +187,8 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             String author,
             ReviewSide side,
             int line,
-            int endLine
+            int endLine,
+            String parentId
     ) {
         static SemanticNote from(HunkReviewNote value) {
             var note = value.note();
@@ -185,7 +199,8 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
                     note.source() == HunkNoteSource.AGENT ? note.author() : null,
                     note.side(),
                     note.line(),
-                    note.endLine()
+                    note.endLine(),
+                    note.parentId()
             );
         }
     }
@@ -292,6 +307,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
         public String side;
         public int line;
         public int endLine;
+        public String parentId;
 
         public StoredNote() {
         }
@@ -308,6 +324,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             result.side = note.side().wireName();
             result.line = note.line();
             result.endLine = note.endLine();
+            result.parentId = note.parentId();
             return result;
         }
 
@@ -327,7 +344,8 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
                     line,
                     endLine == 0 ? line : endLine,
                     !recovered && noteSource == HunkNoteSource.USER,
-                    recovered
+                    recovered,
+                    parentId
             ));
         }
 
@@ -342,6 +360,7 @@ public final class HunkReviewRecovery implements PersistentStateComponent<HunkRe
             result.side = side;
             result.line = line;
             result.endLine = endLine;
+            result.parentId = parentId;
             return result;
         }
     }

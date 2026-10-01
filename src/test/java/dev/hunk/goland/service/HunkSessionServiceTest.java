@@ -16,6 +16,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HunkSessionServiceTest {
     @Test
+    void retainsNativeParentIdsAndRejectsSelfParenting() {
+        var payload = JsonParser.parseString("""
+                {"noteId":"reply","parentId":"root","source":"agent","body":"Done",
+                 "newRange":[4,6]}
+                """).getAsJsonObject();
+        var reply = HunkSessionService.parseNote(payload).orElseThrow();
+        assertThat(reply.parentId()).isEqualTo("root");
+        assertThat(reply.asRecoveredHistory().parentId()).isEqualTo("root");
+        assertThat(reply.withDisplayedCreationTime("2026-10-01T10:00:00Z").parentId()).isEqualTo("root");
+        payload.addProperty("parentId", "reply");
+        assertThat(HunkSessionService.parseNote(payload)).isEmpty();
+    }
+
+    @Test
     void retainsInclusiveUpstreamRangesAndRejectsMalformedEnds() {
         var note = JsonParser.parseString("""
                 {"noteId":"range","source":"user","body":"Check this block",
@@ -41,6 +55,8 @@ class HunkSessionServiceTest {
                    "body":"Check","newRange":[4,4]},
                   {"noteId":"other-range","filePath":"cmd/main.go","source":"user",
                    "body":"Check","newRange":[4,7]},
+                  {"noteId":"reply","parentId":"parent","filePath":"cmd/main.go","source":"user",
+                   "body":"Check","newRange":[4,6]},
                   {"noteId":"correct","filePath":"cmd/main.go","source":"user",
                    "body":"Check","newRange":[4,6]}
                 ]}

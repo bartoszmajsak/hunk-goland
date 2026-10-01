@@ -20,6 +20,9 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   lines outside the diff are rejected. A line does not need an existing thread.
 - **Reviewer and agent provenance:** reviewer notes (`source: "user"`) and agent responses
   (`source: "agent"`) have distinct cards and gutter glyphs.
+- **Reply relationships:** cards show their native parent author without changing chronological
+  order. A reviewer comment with live replies shows **Has replies** instead of a delete action,
+  matching Hunk's restriction on removing parents.
 - **Modern inline UI:** chronological, natural-height, collapsible Markdown cards, independently
   expandable conversation and composer areas, and inline deletion confirmation beneath the
   reviewed line, without a dialog or popup.
@@ -39,8 +42,9 @@ agent handoff, and troubleshooting. Hunk is a required external dependency, not 
   and changed data preserves the message-scroll position.
 - **Restart recovery:** GoLand keeps a bounded, non-roaming recovery snapshot. When an IDE-managed
   Hunk process disappears during an IDE restart or plugin update, the next exact matching review
-  replays missing reviewer comments through Hunk's native composer and keeps missing agent responses
-  as read-only history labeled **Recovered locally**.
+  replays missing root reviewer comments through Hunk's native composer. Missing agent responses
+  and reviewer replies remain read-only history labeled **Recovered locally**. Cached reply parents
+  are remapped only after their original root was verifiably replayed, never by matching text or lines.
 - **Agent handoff:** **Copy agent prompt** puts Hunk's agent-skill prompt on the clipboard.
 - **Matching reviews:** adding a comment automatically starts `hunk diff --watch` for a working tree,
   `hunk diff <base> --watch` for GoLand's **Compare with Branch** current-version view, or
@@ -235,7 +239,9 @@ sequential reviewer comments on one line (including a long multiline Markdown bo
 comment after navigating to a different hunk line, exact daemon persistence as `source: "user"`, an
 externally added `source: "agent"` note appearing in the open GoLand thread, and native deletion
 without losing the remaining notes. It also verifies an inclusive code-range comment amid existing
-cards and preserves that range through the restart gate. It runs the real
+cards, a semantic agent reply with its exact parent identity, and Hunk's restriction on deleting
+that parent. The restart gate preserves the range and shows a cached reply under its verified
+replayed parent without republishing it. It runs the real
 `hunk session review <id> --include-notes --json` command against the live managed session before the
 agent update, before deletion, and after deletion, asserting counts, provenance, bodies, and line
 targets. Machine-readable evidence, including both distinct session IDs, the CLI inspections, and
@@ -288,6 +294,7 @@ for repository setup, local checks, and first-release prerequisites.
 - Saved reviewer comments can be deleted but not yet edited in GoLand. Stock Hunk has editing and
   reply intents; their protected review API is not currently authorized for this plugin.
 - Recovery is local cache assistance, not upstream session persistence: recovered reviewer comments
-  have new native IDs/timestamps, while recovered agent responses are read-only local history.
+  have new native IDs/timestamps, while missing agent responses and reviewer replies are read-only
+  local history.
 - Push-driven SSE synchronization needs an upstream-supported way to delegate the protected review
   capability to the IDE. Until then, the two-second refresh loop is the honest stock-Hunk path.

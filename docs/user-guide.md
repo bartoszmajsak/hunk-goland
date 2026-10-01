@@ -104,7 +104,13 @@ Click **Copy agent prompt** in a thread and paste it into your agent conversatio
 published into that Hunk session appear as agent cards. Live external changes normally appear on
 the next two-second refresh; the pane also has a **Refresh** action.
 
-Reviewer notes can be deleted using their trash action and inline confirmation. Editing a saved
+Semantic replies show **Reply to** and the parent author's name. If that exact parent is absent,
+the card says **Reply · parent unavailable**; matching text or line positions are not used to guess
+the relationship. Replies keep the same oldest-to-newest order as other cards.
+
+Reviewer notes can be deleted using their trash action and inline confirmation. A parent with live
+replies shows **Has replies** instead: Hunk requires those replies to be removed first, by a client
+authorized to remove them. Editing a saved
 reviewer note is not yet supported by this plugin, although stock Hunk supports saved-note editing.
 Comments can target one source line or a selected code range within one published hunk. Semantic
 reply creation is not yet available in GoLand.
@@ -130,7 +136,10 @@ structure, and working-tree contents. If those have changed, automatic replay is
 
 After a matching restart, missing reviewer comments are submitted into a fresh Hunk session and
 receive new IDs and timestamps. Missing agent responses remain read-only **Recovered locally**
-history in GoLand; they are not published as new reviewer comments. If an agent changes the diff,
+history in GoLand; they are not published as new reviewer comments. Cached reviewer replies also
+remain read-only history because GoLand cannot safely recreate their parent relationship through
+the native composer. Only a verified replay of the original parent remaps a cached reply to its new
+ID; an unavailable parent is labeled explicitly. If an agent changes the diff,
 an old anchor may no longer belong to the current review.
 
 ## Build from source

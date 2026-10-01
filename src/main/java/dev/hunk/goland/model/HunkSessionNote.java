@@ -13,7 +13,8 @@ public record HunkSessionNote(
         int line,
         int endLine,
         boolean editable,
-        boolean recovered
+        boolean recovered,
+        String parentId
 ) {
     public HunkSessionNote(
             String id,
@@ -25,13 +26,19 @@ public record HunkSessionNote(
             int line,
             boolean editable
     ) {
-        this(id, source, body, author, createdAt, side, line, line, editable, false);
+        this(id, source, body, author, createdAt, side, line, line, editable, false, null);
     }
 
     public HunkSessionNote(String id, HunkNoteSource source, String body, String author,
                            String createdAt, ReviewSide side, int line, boolean editable,
                            boolean recovered) {
-        this(id, source, body, author, createdAt, side, line, line, editable, recovered);
+        this(id, source, body, author, createdAt, side, line, line, editable, recovered, null);
+    }
+
+    public HunkSessionNote(String id, HunkNoteSource source, String body, String author,
+                           String createdAt, ReviewSide side, int line, int endLine,
+                           boolean editable, boolean recovered) {
+        this(id, source, body, author, createdAt, side, line, endLine, editable, recovered, null);
     }
 
     public HunkSessionNote {
@@ -44,6 +51,9 @@ public record HunkSessionNote(
         }
         if (endLine < line) {
             throw new IllegalArgumentException("endLine must not precede line");
+        }
+        if (parentId != null && (parentId.isBlank() || parentId.equals(id))) {
+            throw new IllegalArgumentException("parentId must reference another note");
         }
     }
 
@@ -62,7 +72,8 @@ public record HunkSessionNote(
                 line,
                 endLine,
                 false,
-                true
+                true,
+                parentId
         );
     }
 
@@ -77,7 +88,13 @@ public record HunkSessionNote(
                 line,
                 endLine,
                 editable,
-                recovered
+                recovered,
+                parentId
         );
+    }
+
+    public HunkSessionNote withParent(String parent) {
+        return new HunkSessionNote(id, source, body, author, createdAt, side, line, endLine,
+                editable, recovered, parent);
     }
 }

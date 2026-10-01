@@ -284,6 +284,7 @@ public final class HunkSessionService {
                 .filter(note -> note.note().side() == target.side())
                 .filter(note -> note.note().line() == target.line())
                 .filter(note -> note.note().endLine() == target.endLine())
+                .filter(note -> note.note().parentId() == null)
                 .filter(note -> note.note().body().equals(body))
                 .findFirst();
     }
@@ -464,10 +465,11 @@ public final class HunkSessionService {
             if (remembered == null) {
                 var plan = recovery.plan(target, exactFingerprint, nativeNotes);
                 var reviewerCreationTimes = new HashMap<String, String>();
+                var restoredIds = new HashMap<String, String>();
                 HunkDiagnostics.info(LOG, "review-recovery-plan", () -> "sessionId=" + sessionId
                         + " target=" + target.displayName()
                         + " reviewerComments=" + plan.reviewerComments().size()
-                        + " agentHistory=" + plan.agentHistory().size()
+                        + " localHistory=" + plan.localHistory().size()
                         + " staleNotes=" + plan.staleNoteCount());
                 for (var reviewNote : plan.reviewerComments()) {
                     var note = reviewNote.note();
@@ -489,13 +491,14 @@ public final class HunkSessionService {
                     if (note.createdAt() != null) {
                         reviewerCreationTimes.put(persisted.note().id(), note.createdAt());
                     }
+                    restoredIds.put(note.id(), persisted.note().id());
                     current = requestReview(origin, target);
                 }
-                // An agent response cannot be recreated with reviewer provenance. Keep it as
-                // explicit local history unless it independently reappeared during replay.
-                var finalPlan = recovery.plan(target, exactFingerprint, reviewNotes(current));
+                // Agent responses and semantic replies cannot be recreated as root reviewer
+                // notes. Only remap parents whose exact native replay was verified above.
+                var finalPlan = recovery.plan(target, exactFingerprint, reviewNotes(current), restoredIds);
                 remembered = new RecoveredSession(
-                        finalPlan.agentHistory(),
+                        finalPlan.localHistory(),
                         recoveryNotice(plan),
                         Map.copyOf(reviewerCreationTimes),
                         null
@@ -517,14 +520,14 @@ public final class HunkSessionService {
                     reviewNotes(current),
                     remembered.reviewerCreationTimes()
             );
-            var merged = HunkReviewRecovery.mergeWithAgentHistory(
+            var merged = HunkReviewRecovery.mergeWithLocalHistory(
                     presented,
-                    remembered.agentHistory()
+                    remembered.localHistory()
             );
             if (!Objects.equals(remembered.checkpointedNotes(), merged)) {
                 recovery.checkpoint(target, exactFingerprint, merged);
                 remembered = new RecoveredSession(
-                        remembered.agentHistory(),
+                        remembered.localHistory(),
                         remembered.notice(),
                         remembered.reviewerCreationTimes(),
                         merged
@@ -567,19 +570,19 @@ public final class HunkSessionService {
                     + " not restored because the comparison changed.";
         }
         var reviewers = plan.reviewerComments().size();
-        var agents = plan.agentHistory().size();
-        if (reviewers == 0 && agents == 0) {
+        var history = plan.localHistory().size();
+        if (reviewers == 0 && history == 0) {
             return null;
         }
         var restored = reviewers == 0
                 ? ""
                 : "Restored " + reviewers + (reviewers == 1 ? " reviewer comment" : " reviewer comments");
-        var history = agents == 0
+        var historyDescription = history == 0
                 ? ""
-                : (restored.isEmpty() ? "Showing " : "; showing ") + agents
-                        + (agents == 1 ? " agent response" : " agent responses")
+                : (restored.isEmpty() ? "Showing " : "; showing ") + history
+                        + (history == 1 ? " review item" : " review items")
                         + " from local history";
-        return restored + history + ".";
+        return restored + historyDescription + ".";
     }
 
     private static JsonObject withProjectedNotes(
@@ -613,6 +616,9 @@ public final class HunkSessionService {
         value.addProperty("endLine", note.endLine());
         value.addProperty("editable", note.editable());
         value.addProperty("recoveredLocally", note.recovered());
+        if (note.parentId() != null) {
+            value.addProperty("parentId", note.parentId());
+        }
         return value;
     }
 
@@ -787,7 +793,8 @@ public final class HunkSessionService {
                     location.line(),
                     location.endLine(),
                     booleanValue(value.get("editable")).orElse(source == HunkNoteSource.USER),
-                    booleanValue(value.get("recoveredLocally")).orElse(false)
+                    booleanValue(value.get("recoveredLocally")).orElse(false),
+                    string(value, "parentId")
             ));
         } catch (RuntimeException ignored) {
             return Optional.empty();
@@ -998,7 +1005,7 @@ public final class HunkSessionService {
     }
 
     private record RecoveredSession(
-            List<HunkReviewNote> agentHistory,
+            List<HunkReviewNote> localHistory,
             String notice,
             Map<String, String> reviewerCreationTimes,
             List<HunkReviewNote> checkpointedNotes

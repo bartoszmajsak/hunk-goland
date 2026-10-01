@@ -520,6 +520,14 @@ final class HunkLineInlay implements Disposable {
                         : title + " author: " + displayAuthor(note)
         );
         var headingStack = verticalStack(heading, metadata);
+        var replyLabel = HunkNoteRelationships.replyLabel(note, lastRenderedNotes, this::displayAuthor);
+        if (replyLabel != null) {
+            var relationship = secondaryLabel(replyLabel);
+            relationship.setIcon(AllIcons.Actions.Back);
+            relationship.setIconTextGap(JBUI.scale(4));
+            relationship.getAccessibleContext().setAccessibleName(replyLabel);
+            headingStack.add(relationship);
+        }
 
         var text = markdownBody(note, title);
 
@@ -536,7 +544,14 @@ final class HunkLineInlay implements Disposable {
         header.setOpaque(false);
         header.add(leading, BorderLayout.CENTER);
         if (reviewerComment && note.editable()) {
-            header.add(deleteControls(note), BorderLayout.EAST);
+            if (HunkNoteRelationships.hasLiveReplies(note, lastRenderedNotes)) {
+                var hasReplies = secondaryLabel("Has replies");
+                hasReplies.setToolTipText("Hunk requires replies to be removed before their parent comment.");
+                hasReplies.getAccessibleContext().setAccessibleName("Comment cannot be deleted while it has replies");
+                header.add(hasReplies, BorderLayout.EAST);
+            } else {
+                header.add(deleteControls(note), BorderLayout.EAST);
+            }
         }
 
         var card = new NaturalHeightRoundedPanel(

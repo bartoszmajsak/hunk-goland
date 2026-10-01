@@ -238,12 +238,26 @@ class HunkReviewCommentUiTest {
                             .filter { it.component.isShowing() }
                             .any { it.htmlInIde().contains(FakeHunkDaemon.EXTERNAL_RESPONSE) }
                     }
+                    awaitCondition("external semantic reply label") {
+                        frame.x { byAccessibleName("Reply to context-agent") }
+                            .let { it.present() && it.component.isShowing() }
+                    }
+                    frame.driver.invokeAction("HideAllWindows", now = false)
+                    awaitCondition("unobstructed reply-review editor") {
+                        frame.xx { byAccessibleName("Hunk review threads") }
+                            .list().none { it.component.isShowing() }
+                    }
                     ux.capture(
                     frame,
                     "06-external-sync",
                     "External agent response synced live",
-                    "An agent response added by another client appears as a distinct modern card while the line thread remains open.",
+                    "An agent response added by another client appears as a distinct modern card, with its native parent relationship labeled Reply to context-agent. The line thread remains open.",
                     )
+                    frame.driver.invokeAction("HideAllWindows", now = false)
+                    awaitCondition("review navigator restored after capture") {
+                        frame.xx { byAccessibleName("Hunk review threads") }
+                            .list().any { it.component.isShowing() }
+                    }
                     ui.submitCommentWithShortcut(TEST_COMMENT)
                     val editorRequest = daemon.takeReviewAction("normal editor")
                     HunkReviewActionAssert.assertThat(editorRequest)
