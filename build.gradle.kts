@@ -51,7 +51,7 @@ dependencies {
     }
     testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
     testImplementation("org.assertj:assertj-core:3.27.7")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
     "integrationTestImplementation"("org.awaitility:awaitility:4.3.0")
     "integrationTestImplementation"("org.jetbrains.kotlin:kotlin-stdlib:2.4.10")
     "integrationTestImplementation"("org.jetbrains.teamcity:serviceMessages:2024.07")
