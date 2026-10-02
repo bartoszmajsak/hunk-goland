@@ -204,8 +204,13 @@ The same JetBrains Driver tests support three display adapters:
 ```bash
 ./scripts/run-ui-tests native integrationTest       # visible on the current desktop
 ./scripts/run-ui-tests weston integrationTest       # headless native Wayland
-./scripts/run-ui-tests xvfb integrationTest         # headless X11; used in CI
+./scripts/run-ui-tests xvfb integrationTest         # optional local headless X11
 ```
+
+The Weston adapter requires version 15 or newer: GoLand's Wayland toolkit needs
+the headless compositor's `--fake-seat` option. Ubuntu 24.04's packaged Weston is
+too old. CI builds checksum-pinned Weston 15.0.1 and uses Wayland for both suites;
+there is no Xvfb fallback in CI.
 
 `integrationTest` launches real GoLand against a generated, self-contained Go module and Git
 repository, using a signed fake daemon and fixture TUI. It verifies UI and transport behavior,
@@ -279,7 +284,7 @@ hierarchies, diff `DataContext`, daemon sessions, Hunk PIDs/arguments/working di
 isolated `idea.log`. Lifecycle and opt-in diagnostic log events use stable `event=…` names and never
 include comment bodies or tokens.
 
-GitHub Actions uses Xvfb to run both the visual fixture and real-upstream tasks, runs Plugin
+GitHub Actions uses headless Weston to run both the visual fixture and real-upstream tasks, runs Plugin
 Verifier, and uploads the HTML report, screenshots, daemon evidence, diagnostics, and installable ZIP.
 The verified guide and selected fixture screenshots form the living documentation site. Successful
 default-branch runs deploy it to GitHub Pages; pull requests retain a preview artifact.

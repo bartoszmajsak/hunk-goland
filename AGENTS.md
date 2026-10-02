@@ -92,9 +92,12 @@ research under `docs/`; the local journal is not required to build or test.
 - Normal UI tests must use the generated Git-backed Go fixture. Do not depend on a personal checkout,
   `dynamic-crd-watch`, KServe, or another repository being present or on the test classpath.
 - Use JetBrains Driver against a real GoLand process. Use `native`, `weston`, or `xvfb` through
-  `scripts/run-ui-tests`; keep Xvfb working for GitHub Actions and Weston for headless Wayland.
+  `scripts/run-ui-tests`. CI uses checksum-pinned Weston 15 on headless Wayland only; retain
+  the optional local Xvfb adapter. The headless Wayland toolkit requires --fake-seat.
 - Serialize Driver suites: isolated IDE profiles still share Starter's default remote port 10500.
   Preserve Gradle task ordering and sequential CI calls to prevent port collisions.
+- Serialize all local act invocations, including dry runs: reusable jobs share a container identity
+  and another invocation's cleanup can destroy the live verification container.
 - Outside the IDE, use `PtyProcessBuilder` for a real test TUI. `PtyCommandLine` needs an IntelliJ
   Application and can silently fall back to pipes in the host test JVM; Hunk 0.23 rejects that for
   `--watch`. For cleanup obtain a `ProcessHandle` from `pid()`, not pty4j's unsupported `toHandle()`.

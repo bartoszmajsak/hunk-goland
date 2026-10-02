@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ubuntu 24.04's Weston lacks the virtual seat required by JetBrains' WLToolkit.
+# Build unmodified upstream sources; never use Meson's unverified fallback downloads.
+weston_version=15.0.1
+weston_sha256=551d039bfb0c837ba5a4d027cdb8ee16bded0eedb789821f8025d8a64b791f6d
+protocols_version=1.49
+protocols_sha256=ec4c8f74942d6dff7ace8b4ce4764f0ef9ff618a935d974ea77edee2ad240b14
+display_info_version=0.3.0
+display_info_sha256=6ae77cd937f9cf7d1321d35c116062c4911e8447010a6a713ac4286f7a9d5987
+
+build_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/hunk-ci-weston.XXXXXX")"
+install_root="$build_root/install"
+fetch_source() {
+  local name="$1" version="$2" sha256="$3" upstream="$4"
+  local archive="$build_root/$name-$version.tar.xz"
+  curl --proto '=https' --proto-redir '=https' --fail --silent --show-error \
+    --location --retry 3 --output "$archive" \
+    "$upstream/-/releases/$version/downloads/$name-$version.tar.xz"
+  printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict
+  tar -xJf "$archive" -C "$build_root"
+}
+
+fetch_source wayland-protocols "$protocols_version" "$protocols_sha256" \
+  https://gitlab.freedesktop.org/wayland/wayland-protocols
+fetch_source libdisplay-info "$display_info_version" "$display_info_sha256" \
+  https://gitlab.freedesktop.org/emersion/libdisplay-info
+fetch_source weston "$weston_version" "$weston_sha256" \
+  https://gitlab.freedesktop.org/wayland/weston
+
+meson setup "$build_root/protocols-build" "$build_root/wayland-protocols-$protocols_version" \
+  --prefix="$install_root" --libdir=lib --wrap-mode=nofallback -Dtests=false
+meson install -C "$build_root/protocols-build"
+
+meson setup "$build_root/display-info-build" "$build_root/libdisplay-info-$display_info_version" \
+  --prefix="$install_root" --libdir=lib --wrap-mode=nofallback --buildtype=release
+meson compile -C "$build_root/display-info-build" -j 4
+meson install -C "$build_root/display-info-build"
+
+export PKG_CONFIG_PATH="$install_root/lib/pkgconfig:$install_root/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+meson setup "$build_root/weston-build" "$build_root/weston-$weston_version" \
+  --prefix="$install_root" --libdir=lib --wrap-mode=nofallback --buildtype=release \
+  -Dbackend-default=headless -Dbackend-headless=true \
+  -Dbackend-drm=false -Dbackend-pipewire=false -Dbackend-rdp=false -Dbackend-vnc=false \
+  -Dbackend-wayland=false -Dbackend-x11=false -Drenderer-gl=false -Drenderer-vulkan=false \
+  -Dxwayland=false -Dsystemd=false -Dremoting=false -Dpipewire=false \
+  -Dshell-desktop=true -Dshell-ivi=false -Dshell-kiosk=false -Dshell-lua=false \
+  -Dcolor-management-lcms=false -Dimage-jpeg=false -Dimage-webp=false \
+  -Dtools=[] -Ddemo-clients=false -Dsimple-clients=[] -Dresize-pool=false \
+  -Dwcap-decode=false -Dtests=false -Ddoc=false
+meson compile -C "$build_root/weston-build" -j 4
+meson install -C "$build_root/weston-build"
+
+export LD_LIBRARY_PATH="$install_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+test "$("$install_root/bin/weston" --version)" = "weston $weston_version"
+if [[ -n "${GITHUB_PATH:-}" && -n "${GITHUB_ENV:-}" ]]; then
+  printf '%s\n' "$install_root/bin" >> "$GITHUB_PATH"
+  printf 'LD_LIBRARY_PATH=%s\n' "$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+fi
+echo "Installed checksum-pinned headless Weston $weston_version in $install_root"

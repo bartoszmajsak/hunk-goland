@@ -63,6 +63,11 @@ case "$display_backend" in
 
   weston)
     require_command weston
+    weston_version="$(weston --version)"
+    if [[ ! "$weston_version" =~ ^weston\ ([0-9]+)\. ]] || (( BASH_REMATCH[1] < 15 )); then
+      echo "Headless GoLand requires Weston 15 or newer with --fake-seat; found '$weston_version'." >&2
+      exit 2
+    fi
     runtime_directory="$(mktemp -d "${TMPDIR:-/tmp}/hunk-goland-weston.XXXXXX")"
     chmod 700 "$runtime_directory"
     socket="hunk-goland-test"

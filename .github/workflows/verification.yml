@@ -54,7 +54,14 @@ jobs:
       - name: Install display and documentation tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb xauth pandoc
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential meson ninja-build pkg-config pandoc hwdata fonts-dejavu-core \
+            libwayland-dev libpixman-1-dev libxkbcommon-dev libinput-dev libevdev-dev \
+            libdrm-dev libudev-dev libcairo2-dev libpng-dev libpango1.0-dev \
+            libfontconfig1-dev libglib2.0-dev libxi6 libxtst6
+
+      - name: Build checksum-pinned headless Wayland compositor
+        run: bash scripts/install-ci-weston
 
       - name: Lint workflows and test publication guards
         run: |
@@ -67,16 +74,16 @@ jobs:
       - name: Build, test, and verify plugin compatibility
         run: ./gradlew test buildPlugin verifyPlugin --no-build-cache --console=plain --no-daemon
 
-      - name: Drive GoLand in Xvfb
+      - name: Drive GoLand in headless Wayland
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: ./scripts/run-ui-tests xvfb integrationTest --rerun-tasks --no-build-cache
+        run: ./scripts/run-ui-tests weston integrationTest --rerun-tasks --no-build-cache
 
       - name: Verify native Hunk and same-profile restart
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: >-
-          ./scripts/run-ui-tests xvfb realHunkE2e --rerun-tasks --no-build-cache
+          ./scripts/run-ui-tests weston realHunkE2e --rerun-tasks --no-build-cache
           -PhunkExecutable="$HOME/.hunk/bin/hunk"
 
       - name: Generate living docs and verified release assets
