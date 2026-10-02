@@ -5,7 +5,7 @@ import org.gradle.api.tasks.testing.Test
 plugins {
     java
     kotlin("jvm") version "2.4.10"
-    id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
 group = "dev.hunk"
