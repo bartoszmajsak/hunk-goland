@@ -56,7 +56,7 @@ dependencies {
     "integrationTestImplementation"("org.jetbrains.kotlin:kotlin-stdlib:2.4.10")
     "integrationTestImplementation"("org.jetbrains.teamcity:serviceMessages:2024.07")
     "integrationTestImplementation"("org.kodein.di:kodein-di-jvm:7.26.1")
-    "integrationTestImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
+    "integrationTestImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0")
 }
 
 configurations.named("integrationTestImplementation") {
